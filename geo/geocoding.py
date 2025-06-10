@@ -219,3 +219,57 @@ class NominatimClassifier:
         place_rank_udf = udf(self.get_place_rank_label, StringType())
         importance_udf = udf(self.get_importance_label, StringType())
         return place_rank_udf, importance_udf
+
+
+class GeocodingConfig:
+    """
+    Configuration class for geocoding operations.
+
+    Attributes:
+        api_key (str): API key for geocoding service
+        provider (str): Geocoding provider ('google', 'nominatim', 'here')
+        rate_limit (int): Maximum requests per second
+        timeout (int): Request timeout in seconds
+
+    Example:
+        config = GeocodingConfig(
+            api_key="your_api_key",
+            provider="google",
+            rate_limit=10
+        )
+    """
+
+    def __init__(self, api_key=None, provider='nominatim', rate_limit=1, timeout=30):
+        self.api_key = api_key
+        self.provider = provider
+        self.rate_limit = rate_limit
+        self.timeout = timeout
+
+        # Validate provider
+        valid_providers = ['google', 'nominatim', 'here', 'arcgis']
+        if provider not in valid_providers:
+            raise ValueError(f"Provider must be one of: {valid_providers}")
+
+        # Validate API key requirement
+        if provider in ['google', 'here'] and not api_key:
+            raise ValueError(f"API key is required for {provider} provider")
+
+    def to_dict(self):
+        """Convert config to dictionary."""
+        return {
+            'api_key': self.api_key,
+            'provider': self.provider,
+            'rate_limit': self.rate_limit,
+            'timeout': self.timeout
+        }
+
+    @classmethod
+    def from_env(cls):
+        """Create config from environment variables."""
+        import os
+        return cls(
+            api_key=os.getenv('GEOCODING_API_KEY'),
+            provider=os.getenv('GEOCODING_PROVIDER', 'nominatim'),
+            rate_limit=int(os.getenv('GEOCODING_RATE_LIMIT', '1')),
+            timeout=int(os.getenv('GEOCODING_TIMEOUT', '30'))
+        )

@@ -128,3 +128,34 @@ def create_geocoding_config(data_path: str, **kwargs) -> HDFSConfig:
     }
     defaults.update(kwargs)
     return HDFSConfig(**defaults)
+
+
+def create_config_from_env():
+    """
+    Create HDFS configuration from environment variables.
+
+    Returns:
+        dict: HDFS configuration dictionary
+
+    Environment Variables:
+        HDFS_HOST: HDFS namenode host
+        HDFS_PORT: HDFS namenode port (default: 9000)
+        HDFS_USER: HDFS user (default: current user)
+
+    Example:
+        config = create_config_from_env()
+        hdfs_client = HDFSClient(config)
+    """
+    import os
+
+    config = {
+        'host': os.getenv('HDFS_HOST', 'localhost'),
+        'port': int(os.getenv('HDFS_PORT', '9000')),
+        'user': os.getenv('HDFS_USER', os.getenv('USER', 'hdfs')),
+    }
+
+    # Add optional configurations
+    if os.getenv('HDFS_TIMEOUT'):
+        config['timeout'] = int(os.getenv('HDFS_TIMEOUT'))
+
+    return config
