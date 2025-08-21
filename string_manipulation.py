@@ -1,6 +1,36 @@
 # python stdlib imports
 from logging import lastResort
 
+# ============================================================================
+# STANDARDIZED LOGGING IMPORT
+# ============================================================================
+try:
+    from utilities.logging_utils import setup_module_logging
+    setup_module_logging(globals(), __name__)
+except ImportError:
+    # Handle case where package has different name
+    import sys
+    package_name = __name__.split('.')[0]
+    try:
+        logging_module = sys.modules[f"{package_name}.logging_utils"]
+        setup_func = getattr(logging_module, 'setup_module_logging', None)
+        if setup_func:
+            setup_func(globals(), __name__)
+        else:
+            # Individual function import fallback
+            log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
+            log_debug = getattr(logging_module, 'log_debug', lambda x: print(f"DEBUG: {x}"))
+            log_warning = getattr(logging_module, 'log_warning', lambda x: print(f"WARNING: {x}"))
+            log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
+            log_critical = getattr(logging_module, 'log_critical', lambda x: print(f"CRITICAL: {x}"))
+    except:
+        # Fallback functions
+        def log_info(msg): print(f"INFO: {msg}")
+        def log_debug(msg): print(f"DEBUG: {msg}")
+        def log_warning(msg): print(f"WARNING: {msg}")
+        def log_error(msg): print(f"ERROR: {msg}")
+        def log_critical(msg): print(f"CRITICAL: {msg}")
+
 # custom functions and data
 
 # This module doesn't actually need utilities imports for its core function

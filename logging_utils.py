@@ -121,3 +121,48 @@ __all__ = [
     "log_critical",
     "parse_log_level",
 ]
+
+
+# ============================================================================
+# STANDARDIZED LOGGING IMPORTS FOR ALL MODULES
+# ============================================================================
+
+def get_module_logger(module_name=None):
+    """
+    Get standardized logging functions for any module.
+    This ensures all modules use the same logging system.
+    
+    Args:
+        module_name: Optional module name for logging context
+        
+    Returns:
+        dict: Dictionary of logging functions (log_info, log_error, etc.)
+    """
+    # Initialize logger if not already done
+    get_logger()
+    
+    return {
+        'log_info': log_info,
+        'log_error': log_error, 
+        'log_warning': log_warning,
+        'log_debug': log_debug,
+        'log_critical': log_critical
+    }
+
+def setup_module_logging(module_globals, module_name=None):
+    """
+    Setup logging functions in a module's global namespace.
+    Call this from any module that needs logging.
+    
+    Args:
+        module_globals: The module's globals() dict
+        module_name: Optional module name
+    """
+    logger_funcs = get_module_logger(module_name)
+    module_globals.update(logger_funcs)
+    
+    # Also add direct access to logger
+    module_globals['logger'] = get_logger()
+
+# Add to __all__ for easy import
+__all__.extend(['get_module_logger', 'setup_module_logging'])

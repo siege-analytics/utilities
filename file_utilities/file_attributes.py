@@ -25,28 +25,28 @@ except ImportError:
 
 # Logging
 
-import logging
-
-# Handle dynamic package imports
+# ============================================================================
+# STANDARDIZED LOGGING IMPORT
+# ============================================================================
 try:
-    from utilities.logging_utils import (
-        log_info,
-        log_debug,
-        log_warning,
-        log_error,
-        log_critical,
-    )
+    from utilities.logging_utils import setup_module_logging
+    setup_module_logging(globals(), __name__)
 except ImportError:
     # Handle case where package has different name
     import sys
     package_name = __name__.split('.')[0]
     try:
         logging_module = sys.modules[f"{package_name}.logging_utils"]
-        log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
-        log_debug = getattr(logging_module, 'log_debug', lambda x: print(f"DEBUG: {x}"))
-        log_warning = getattr(logging_module, 'log_warning', lambda x: print(f"WARNING: {x}"))
-        log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
-        log_critical = getattr(logging_module, 'log_critical', lambda x: print(f"CRITICAL: {x}"))
+        setup_func = getattr(logging_module, 'setup_module_logging', None)
+        if setup_func:
+            setup_func(globals(), __name__)
+        else:
+            # Individual function import fallback
+            log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
+            log_debug = getattr(logging_module, 'log_debug', lambda x: print(f"DEBUG: {x}"))
+            log_warning = getattr(logging_module, 'log_warning', lambda x: print(f"WARNING: {x}"))
+            log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
+            log_critical = getattr(logging_module, 'log_critical', lambda x: print(f"CRITICAL: {x}"))
     except:
         # Fallback functions
         def log_info(msg): print(f"INFO: {msg}")
@@ -55,9 +55,7 @@ except ImportError:
         def log_error(msg): print(f"ERROR: {msg}")
         def log_critical(msg): print(f"CRITICAL: {msg}")
 
-#  from code.python.utilities import log_info
-
-logger = logging.getLogger(__name__)
+# Using standardized logging system - no need for direct logger access
 
 
 def rmtree(f: pathlib.Path):
@@ -165,7 +163,7 @@ def count_duplicate_rows_in_file_using_awk(target_file_path: pathlib.Path) -> in
     """
 
     message = f"In the count duplicate rows using awk function for {target_file_path}\n"
-    logger.info(message)
+    log_info(message)
 
     awk_template = f"awk '_[$0]++' {target_file_path} | sed '/^[[:space:]]*$/d' | wc -l"
 
@@ -200,7 +198,7 @@ def count_duplicate_rows_in_file_using_awk(target_file_path: pathlib.Path) -> in
     else:
 
         message = f"There was an error counting duplicate rows in {target_file_path}: {result.stderr}"
-        logger.error(message)
+        log_error(message)
         return duplicate_rows_count
 
 
@@ -336,7 +334,7 @@ def remove_empty_rows_in_file_using_sed(
         if fixed_file_path is None:
 
             message = f"No path was set for output for {target_file_path}, so this will remain StringIO"
-            logger.info(message)
+            log_info(message)
             output_file.write(removed_rows_result)
             return output_file
         else:

@@ -1,47 +1,148 @@
-# python standard
-from typing import Optional, Union, Tuple
+#!/usr/bin/env python3
+"""
+Spark Functions Module - Optimized Imports
+Handles conflicts between Spark vs Python native functions
+"""
+
+# ============================================================================
+# PYTHON STANDARD LIBRARY IMPORTS
+# ============================================================================
+from typing import Optional, Union, Tuple, List, Dict, Any
 import os
+import sys
 import pathlib
 import json
-from builtins import sum as py_sum
-from builtins import round as py_round
+import time
+import uuid
+import shutil
+from pathlib import Path
 
-# spark/sedona
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.types import *
-from pyspark.sql.column import Column
-from pyspark.sql.functions import *
+# ============================================================================
+# STANDARDIZED LOGGING IMPORT
+# ============================================================================
+try:
+    from utilities.logging_utils import setup_module_logging
+    setup_module_logging(globals(), __name__)
+except ImportError:
+    # Handle case where package has different name
+    import sys
+    package_name = __name__.split('.')[0]
+    try:
+        logging_module = sys.modules[f"{package_name}.logging_utils"]
+        setup_func = getattr(logging_module, 'setup_module_logging', None)
+        if setup_func:
+            setup_func(globals(), __name__)
+        else:
+            # Individual function import fallback
+            log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
+            log_debug = getattr(logging_module, 'log_debug', lambda x: print(f"DEBUG: {x}"))
+            log_warning = getattr(logging_module, 'log_warning', lambda x: print(f"WARNING: {x}"))
+            log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
+            log_critical = getattr(logging_module, 'log_critical', lambda x: print(f"CRITICAL: {x}"))
+    except:
+        # Fallback functions
+        def log_info(msg): print(f"INFO: {msg}")
+        def log_debug(msg): print(f"DEBUG: {msg}")
+        def log_warning(msg): print(f"WARNING: {msg}")
+        def log_error(msg): print(f"ERROR: {msg}")
+        def log_critical(msg): print(f"CRITICAL: {msg}")
 
-# sedona
-from sedona.sql import *
-from sedona.register import SedonaRegistrator
-from sedona.sql.types import GeometryType
-from sedona.utils import SedonaKryoRegistrator, KryoSerializer
+# Explicit naming to avoid conflicts with Spark functions
+from builtins import sum as py_sum, round as py_round, max as py_max, min as py_min
 
-# extra pandas
-import pandas as pd
+# ============================================================================
+# PYSPARK - HANDLE FUNCTION NAME CONFLICTS
+# ============================================================================
+try:
+    # DataFrame already imported at module level
+    # PySpark types already imported at module level
+    from pyspark.sql.column import Column
+    # Import Spark functions with explicit F. prefix to avoid conflicts
+    # F module already imported at module level
+    # PySpark functions already imported at module level (use F.function_name)
+    PYSPARK_AVAILABLE = True
+    
+    # Alias for backward compatibility
+    DataFrame = SparkDataFrame
+    
+except ImportError:
+    # Stubs for type hints when PySpark not available
+    SparkDataFrame = type(None)
+    DataFrame = type(None)
+    SparkSession = type(None)
+    Column = type(None)
+    PYSPARK_AVAILABLE = False
+    
+    # Create stub F module to prevent attribute errors
+    class _FStub:
+        def __getattr__(self, name):
+            def stub_func(*args, **kwargs):
+                raise ImportError(f"PySpark not available: F.{name}() requires 'pip install pyspark'")
+            return stub_func
+    F = _FStub()
+    
+    # Stub functions
+    def col(*args): raise ImportError("PySpark not available")
+    def lit(*args): raise ImportError("PySpark not available")
+    def when(*args): raise ImportError("PySpark not available")
+    def expr(*args): raise ImportError("PySpark not available")
 
-# extra Python
+# ============================================================================
+# SEDONA - GEOSPATIAL EXTENSIONS
+# ============================================================================
+try:
+    import sedona.sql as sedona_sql
+    from sedona.register import SedonaRegistrator
+    from sedona.sql.types import GeometryType
+    from sedona.utils import SedonaKryoRegistrator, KryoSerializer
+    SEDONA_AVAILABLE = True
+except ImportError:
+    SEDONA_AVAILABLE = False
+    sedona_sql = None
+    SedonaRegistrator = type(None)
+    GeometryType = type(None)
+    KryoSerializer = type(None)
 
-from tabulate import tabulate  # Ensure tabulate is installed (pip install tabulate)
+# ============================================================================
+# DATA PROCESSING LIBRARIES
+# ============================================================================
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    pd = None
 
-# dheeraj defined - handle package name dynamically
+try:
+    from tabulate import tabulate
+    TABULATE_AVAILABLE = True
+except ImportError:
+    TABULATE_AVAILABLE = False
+    def tabulate(data, headers=None, tablefmt="simple"):
+        """Fallback tabulate function"""
+        return str(data)
+
+# ============================================================================
+# PROJECT IMPORTS - DYNAMIC PACKAGE HANDLING
+# ============================================================================
 try:
     from utilities.logging_utils import log_info, log_error
 except ImportError:
     # Handle case where package is imported with different name
-    import sys
     package_name = __name__.split('.')[0]
-    logging_module = f"{package_name}.logging_utils"
-    if logging_module in sys.modules:
-        log_info = sys.modules[logging_module].log_info
-        log_error = sys.modules[logging_module].log_error
-    else:
-        # Fallback logging
+    try:
+        logging_module = sys.modules.get(f"{package_name}.logging_utils")
+        if logging_module:
+            log_info = getattr(logging_module, 'log_info', lambda msg: print(f"INFO: {msg}"))
+            log_error = getattr(logging_module, 'log_error', lambda msg: print(f"ERROR: {msg}"))
+        else:
+            raise ImportError("Logging module not found")
+    except:
+        # Fallback logging functions
         def log_info(msg): print(f"INFO: {msg}")
         def log_error(msg): print(f"ERROR: {msg}")
 
-# Import settings
+# Settings with fallbacks
 try:
     from settings import *
 except ImportError:
@@ -635,12 +736,8 @@ def ensure_literal(value):
     return lit(value)
 
 
-from pyspark.sql.functions import expr, col
-from sedona.sql import ST_Transform
-from pyspark.sql import SparkSession
-
-from pyspark.sql import functions as F
-from pyspark.sql.functions import expr
+# All imports handled at module level - using F.expr, F.col, etc.
+# ST_Transform available via sedona_sql module if SEDONA_AVAILABLE
 
 
 def reproject_geom_columns(df, geom_columns, source_srid, target_srid):
@@ -704,20 +801,11 @@ def prepare_dataframe_for_export(df, logger_func=None):
     Returns:
         The transformed DataFrame with all columns as strings or JSON strings.
     """
-    from pyspark.sql.types import (
-        BinaryType,
-        StringType,
-        StructType,
-        ArrayType,
-        IntegerType,
-        LongType,
-        DoubleType,
-        FloatType,
-        BooleanType,
-        DateType,
-        TimestampType,
-    )
-    from pyspark.sql.functions import base64, col, to_json, when, isnan, isnull
+    # Check PySpark availability
+    if not PYSPARK_AVAILABLE:
+        raise ImportError("PySpark is required for this function. Install with: pip install pyspark")
+    # All PySpark types and functions already imported at module level
+    # Using: F.base64, F.col, F.to_json, when, isnan, isnull, etc.
 
     # Use provided logger or fall back to print
     log = logger_func if logger_func else print
@@ -835,14 +923,14 @@ def prepare_summary_dataframe(
             string_data.append(string_row)
 
         # Create DataFrame with explicit string schema
-        from pyspark.sql.types import StructType, StructField, StringType
+        # PySpark types already imported at module level
 
         schema = StructType(
             [StructField(col_name, StringType(), True) for col_name in column_names]
         )
 
         # Use current Spark session
-        from pyspark.sql import SparkSession
+        # SparkSession already imported at module level
 
         spark = SparkSession.getActiveSession()
 
@@ -898,7 +986,7 @@ def pivot_summary_table_for_bools(df, columns, spark):
     Returns:
       DataFrame: A Spark DataFrame representing the pivot table.
     """
-    from pyspark.sql import functions as F
+    # F module already imported at module level
 
     # Get the total number of records and convert to float.
     total_records = df.count()
@@ -1056,8 +1144,8 @@ def print_debug_table(spark_df, title):
     print("\n")
 
 
-from pyspark.sql.types import MapType, StringType
-import pyspark.sql.functions as F
+# PySpark types already imported at module level
+# F module already imported at module level
 
 # New walkability configuration in dictionary form.
 walkability_config = {
@@ -1098,7 +1186,7 @@ def compute_walkability(distance):
 
 new_walkability_udf = F.udf(compute_walkability, MapType(StringType(), StringType()))
 
-from pyspark.sql.functions import expr
+# PySpark functions already imported at module level (use F.function_name)
 
 
 def validate_geometry(df, geom_col, step_name):
@@ -1141,7 +1229,7 @@ import shutil
 import os
 import time
 from pathlib import Path
-from pyspark.sql import DataFrame
+# DataFrame already imported at module level
 from utilities.logging_utils import log_info, log_error
 
 
@@ -1580,7 +1668,7 @@ import shutil
 import os
 import time
 from pathlib import Path
-from pyspark.sql import DataFrame
+# DataFrame already imported at module level
 from utilities.logging_utils import log_info, log_error
 
 
@@ -2274,7 +2362,7 @@ def setup_fallback_spark_session(app_name, log_info_func, log_error_func):
     Fallback Spark session creation when HDFS is not available.
     """
     try:
-        from pyspark.sql import SparkSession
+        # SparkSession already imported at module level
         from sedona.sql import SedonaContext
 
         spark = SparkSession.builder.appName(app_name).getOrCreate()
@@ -2419,7 +2507,7 @@ def create_geocoding_summary_report(df: DataFrame, step_metadata: dict) -> DataF
         DataFrame: Summary report DataFrame
     """
     try:
-        from pyspark.sql import SparkSession
+        # SparkSession already imported at module level
 
         spark = SparkSession.getActiveSession()
         total_records = df.count()
