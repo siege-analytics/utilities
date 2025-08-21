@@ -8,7 +8,7 @@ import json
 try:
     from utilities.logging_utils import setup_module_logging
     setup_module_logging(globals(), __name__)
-except ImportError:
+except (ImportError, FileNotFoundError, Exception) as e:
     # Handle case where package has different name
     import sys
     package_name = __name__.split('.')[0]
@@ -32,54 +32,47 @@ except ImportError:
         def log_error(msg): print(f"ERROR: {msg}")
         def log_critical(msg): print(f"CRITICAL: {msg}")
 
-# pyspark/sedona
-
-from sedona.sql.types import *
-from pyspark.sql.functions import udf
-from pyspark.sql.types import StringType
-
-# custom functions and data
-
-
-# python expanded libraries
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
-from geopy import geocoders
-
-# logging
-import logging
-# Handle dynamic package imports
+# ============================================================================
+# OPTIONAL GEOSPATIAL DEPENDENCIES
+# ============================================================================
 try:
-    from utilities.logging_utils import (
-        init_logger,
-        log_info,
-        log_error,
-        log_debug,
-        log_warning,
-        log_critical,
-    )
-except ImportError:
-    # Handle case where package has different name
-    import sys
-    package_name = __name__.split('.')[0]
-    try:
-        logging_module = sys.modules[f"{package_name}.logging_utils"]
-        init_logger = getattr(logging_module, 'init_logger', lambda x: None)
-        log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
-        log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
-        log_debug = getattr(logging_module, 'log_debug', lambda x: print(f"DEBUG: {x}"))
-        log_warning = getattr(logging_module, 'log_warning', lambda x: print(f"WARNING: {x}"))
-        log_critical = getattr(logging_module, 'log_critical', lambda x: print(f"CRITICAL: {x}"))
-    except:
-        # Fallback functions
-        def init_logger(name): return None
-        def log_info(msg): print(f"INFO: {msg}")
-        def log_error(msg): print(f"ERROR: {msg}")
-        def log_debug(msg): print(f"DEBUG: {msg}")
-        def log_warning(msg): print(f"WARNING: {msg}")
-        def log_critical(msg): print(f"CRITICAL: {msg}")
+    from sedona.sql.types import *
+    SEDONA_AVAILABLE = True
+except (ImportError, FileNotFoundError, Exception) as e:
+    SEDONA_AVAILABLE = False
 
-# Using standardized logging system
+try:
+    from pyspark.sql.functions import udf
+    from pyspark.sql.types import StringType
+    PYSPARK_AVAILABLE = True
+except (ImportError, FileNotFoundError, Exception) as e:
+    PYSPARK_AVAILABLE = False
+    # Stub for UDF creation
+    def udf(*args, **kwargs):
+        raise ImportError("PySpark not available. Install with: pip install pyspark")
+    StringType = type(None)
+
+# ============================================================================
+# GEOSPATIAL DEPENDENCIES
+# ============================================================================
+try:
+    from geopy.geocoders import Nominatim
+    from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+    from geopy import geocoders
+    GEOPY_AVAILABLE = True
+except (ImportError, FileNotFoundError, Exception) as e:
+    GEOPY_AVAILABLE = False
+    # Create stubs for missing functionality
+    class Nominatim:
+        def __init__(self, *args, **kwargs):
+            raise ImportError(f"geopy not available due to: {e}")
+    
+    class GeocoderTimedOut(Exception):
+        pass
+    
+    class GeocoderServiceError(Exception):
+        pass
+
 
 # geocoding config
 
@@ -130,6 +123,11 @@ def use_nominatim_geocoder(query_address, id=None, country_codes=None, max_retri
         JSON string of geocoding result or None if failed
     """
     message = f"{query_address}"
+    
+    # Check if geopy is available
+    if not GEOPY_AVAILABLE:
+        log_error("Geopy not available - cannot perform geocoding")
+        return None
     log_warning(message)
     if not query_address:
         message = "query_address cannot be None, Empty address provided for geocoding"
@@ -268,6 +266,9 @@ class NominatimGeoClassifier:
 
     def register_udfs(self, spark):
         """Register PySpark UDFs and return them."""
+        if not PYSPARK_AVAILABLE:
+            raise ImportError("PySpark is required for UDF registration. Install with: pip install pyspark")
+        
         place_rank_udf = udf(self.get_place_rank_label, StringType())
         importance_udf = udf(self.get_importance_label, StringType())
         return place_rank_udf, importance_udf
