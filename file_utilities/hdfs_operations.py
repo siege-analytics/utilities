@@ -47,13 +47,22 @@ except ImportError:
 
 # Import hash functions - with proper fallbacks
 try:
-    from utilities.file_utilities.hash_management import (
+    # Try relative import first (within same package)
+    from .hash_management import (
         generate_sha256_hash_for_file,
         get_file_hash,
         get_quick_file_signature,
     )
 except ImportError:
-    log_error("Hash functions not found in utilities - using built-in fallbacks")
+    try:
+        # Try absolute import
+        from utilities.file_utilities.hash_management import (
+            generate_sha256_hash_for_file,
+            get_file_hash,
+            get_quick_file_signature,
+        )
+    except ImportError:
+        log_error("Hash functions not found in utilities - using built-in fallbacks")
 
     # Fallback hash functions
     def generate_sha256_hash_for_file(file_path):
@@ -68,7 +77,24 @@ except ImportError:
             return None
 
     def get_file_hash(file_path, algorithm="sha256"):
-        return generate_sha256_hash_for_file(file_path)
+        """Fallback hash function that respects algorithm parameter"""
+        try:
+            if algorithm.lower() == "sha256":
+                hash_func = hashlib.sha256()
+            elif algorithm.lower() == "md5":
+                hash_func = hashlib.md5()
+            elif algorithm.lower() == "sha1":
+                hash_func = hashlib.sha1()
+            else:
+                hash_func = hashlib.new(algorithm)
+                
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(65536), b""):
+                    hash_func.update(chunk)
+            return hash_func.hexdigest()
+        except Exception as e:
+            log_error(f"Error generating {algorithm} hash for {file_path}: {e}")
+            return None
 
     def get_quick_file_signature(file_path):
         try:

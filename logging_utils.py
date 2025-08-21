@@ -23,6 +23,7 @@ def init_logger(
     level="INFO",
     max_bytes=5_000_000,
     backup_count=5,
+    force_reinit=False,
 ):
     """
     Initialize and configure the logger.
@@ -34,22 +35,31 @@ def init_logger(
         level (str|int): Logging level.
         max_bytes (int): Max size for rotating file handler.
         backup_count (int): How many backup logs to keep.
+        force_reinit (bool): Force reinitialize even if logger exists.
 
     Returns:
         logging.Logger: Configured logger instance.
     """
     global logger
 
-    if logger is not None:
-        return logger  # Avoid duplicate initialization
+    # If logger exists and we're not forcing reinit, just update level and return
+    if logger is not None and not force_reinit:
+        level = parse_log_level(level)
+        logger.setLevel(level)
+        return logger
 
     level = parse_log_level(level)
     logger = logging.getLogger(name)
+    
+    # Clear existing handlers to avoid duplicates
+    logger.handlers.clear()
+    
     logger.setLevel(level)
     formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
 
     # Console handler
     stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(level)  # Set handler level too
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
@@ -62,8 +72,12 @@ def init_logger(
         file_handler = RotatingFileHandler(
             log_file_path, maxBytes=max_bytes, backupCount=backup_count
         )
+        file_handler.setLevel(level)  # Set handler level too
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+        
+        # Force a write to create the file
+        logger.info(f"Log file initialized: {log_file_path}")
 
     return logger
 
