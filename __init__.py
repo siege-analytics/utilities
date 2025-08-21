@@ -21,14 +21,28 @@ def import_all_from_module(module_path):
         module = importlib.import_module(module_path)
         imported_names = []
 
-        # Import all public functions from the module
+        # Import all public functions and classes from the module
         for name, obj in inspect.getmembers(module):
-            if inspect.isfunction(obj) and not name.startswith("_"):
-                globals()[name] = obj
-                imported_names.append(name)
+            if not name.startswith("_"):
+                # Import functions
+                if inspect.isfunction(obj):
+                    globals()[name] = obj
+                    imported_names.append(name)
+                # Import classes that are defined in this module (not imported from elsewhere)
+                elif inspect.isclass(obj) and hasattr(obj, '__module__') and obj.__module__ == module.__name__:
+                    globals()[name] = obj
+                    imported_names.append(name)
 
         return imported_names
+    except ImportError as e:
+        if "No module named" in str(e):
+            # Use basic print for package initialization (before logging is available)
+            print(f"Warning: Optional dependency missing for {module_path}: {e}")
+        else:
+            print(f"Warning: Import error from {module_path}: {e}")
+        return []
     except Exception as e:
+        # Use basic print for package initialization (before logging is available)
         print(f"Warning: Error importing from {module_path}: {e}")
         return []
 
@@ -67,4 +81,5 @@ for item in os.listdir(package_dir):
                 new_names = import_all_from_module(submodule_path)
                 __all__.extend(new_names)
 
+# Package initialization complete - use print here as logging may not be set up yet
 print(f"utilities package: Imported {len(__all__)} functions and subpackages")

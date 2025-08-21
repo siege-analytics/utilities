@@ -1,5 +1,4 @@
 # python stdlib imports
-from logging import lastResort
 
 # ============================================================================
 # STANDARDIZED LOGGING IMPORT
