@@ -4,7 +4,11 @@ import io
 import hashlib
 from pyexpat.errors import messages
 
-from IPython.utils.capture import capture_output
+# Make IPython import optional
+try:
+    from IPython.utils.capture import capture_output
+except ImportError:
+    capture_output = None
 import pathlib
 import requests
 import subprocess
@@ -18,8 +22,28 @@ import zipfile
 
 import logging
 
-from utilities.logging_utils import *
-from utilities.file_utilities.file_attributes import *
+# Handle dynamic package imports
+try:
+    from utilities.logging_utils import *
+    from utilities.file_utilities.file_attributes import *
+except ImportError:
+    # Handle case where package has different name
+    import sys
+    package_name = __name__.split('.')[0]
+    try:
+        logging_module = sys.modules[f"{package_name}.logging_utils"]
+        for attr in ['log_info', 'log_debug', 'log_warning', 'log_error', 'log_critical']:
+            globals()[attr] = getattr(logging_module, attr, lambda x: print(f"{attr.upper().split('_')[1]}: {x}"))
+        
+        # Import from file_attributes in same package
+        from .file_attributes import *
+    except Exception as e:
+        # Fallback functions
+        def log_info(msg): print(f"INFO: {msg}")
+        def log_error(msg): print(f"ERROR: {msg}")
+        def log_debug(msg): print(f"DEBUG: {msg}")
+        def log_warning(msg): print(f"WARNING: {msg}")
+        def log_critical(msg): print(f"CRITICAL: {msg}")
 
 logging.getLogger(__name__)
 

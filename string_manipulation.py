@@ -3,7 +3,8 @@ from logging import lastResort
 
 # custom functions and data
 
-from utilities import *
+# This module doesn't actually need utilities imports for its core function
+# Remove the circular dependency
 
 # logging
 

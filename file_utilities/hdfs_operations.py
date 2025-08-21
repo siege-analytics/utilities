@@ -15,7 +15,19 @@ from typing import Optional, Tuple, Dict
 
 # Import your utilities (with fallbacks for missing functions)
 try:
-    from utilities.logging_utils import log_info, log_error
+    # Handle dynamic package imports
+    try:
+        from utilities.logging_utils import log_info, log_error
+    except ImportError:
+        import sys
+        package_name = __name__.split('.')[0]
+        try:
+            logging_module = sys.modules[f"{package_name}.logging_utils"]
+            log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
+            log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
+        except:
+            def log_info(msg): print(f"INFO: {msg}")
+            def log_error(msg): print(f"ERROR: {msg}")
 except ImportError:
 
     def log_info(msg):

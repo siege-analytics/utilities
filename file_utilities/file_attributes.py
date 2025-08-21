@@ -1,30 +1,59 @@
 # Python stdlib
-
 import io
 import hashlib
 from pyexpat.errors import messages
-
-from IPython.utils.capture import capture_output
 import pathlib
 import requests
 import subprocess
-
-from pkg_resources import working_set
-from tqdm import tqdm
-
 import zipfile
+
+# Optional imports
+try:
+    from IPython.utils.capture import capture_output
+except ImportError:
+    capture_output = None
+    
+try:
+    from pkg_resources import working_set
+except ImportError:
+    working_set = None
+    
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
 
 # Logging
 
 import logging
 
-from utilities.logging_utils import (
-    log_info,
-    log_debug,
-    log_warning,
-    log_error,
-    log_critical,
-)
+# Handle dynamic package imports
+try:
+    from utilities.logging_utils import (
+        log_info,
+        log_debug,
+        log_warning,
+        log_error,
+        log_critical,
+    )
+except ImportError:
+    # Handle case where package has different name
+    import sys
+    package_name = __name__.split('.')[0]
+    try:
+        logging_module = sys.modules[f"{package_name}.logging_utils"]
+        log_info = getattr(logging_module, 'log_info', lambda x: print(f"INFO: {x}"))
+        log_debug = getattr(logging_module, 'log_debug', lambda x: print(f"DEBUG: {x}"))
+        log_warning = getattr(logging_module, 'log_warning', lambda x: print(f"WARNING: {x}"))
+        log_error = getattr(logging_module, 'log_error', lambda x: print(f"ERROR: {x}"))
+        log_critical = getattr(logging_module, 'log_critical', lambda x: print(f"CRITICAL: {x}"))
+    except:
+        # Fallback functions
+        def log_info(msg): print(f"INFO: {msg}")
+        def log_debug(msg): print(f"DEBUG: {msg}")
+        def log_warning(msg): print(f"WARNING: {msg}")
+        def log_error(msg): print(f"ERROR: {msg}")
+        def log_critical(msg): print(f"CRITICAL: {msg}")
 
 #  from code.python.utilities import log_info
 

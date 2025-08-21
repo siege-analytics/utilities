@@ -3,10 +3,6 @@ from typing import Optional, Union, Tuple
 import os
 import pathlib
 import json
-import time
-import uuid
-import shutil
-from pathlib import Path
 from builtins import sum as py_sum
 from builtins import round as py_round
 
@@ -26,11 +22,32 @@ from sedona.utils import SedonaKryoRegistrator, KryoSerializer
 import pandas as pd
 
 # extra Python
+
 from tabulate import tabulate  # Ensure tabulate is installed (pip install tabulate)
 
-# dheeraj defined
-from utilities.logging_utils import log_info, log_error
-from settings import *
+# dheeraj defined - handle package name dynamically
+try:
+    from utilities.logging_utils import log_info, log_error
+except ImportError:
+    # Handle case where package is imported with different name
+    import sys
+    package_name = __name__.split('.')[0]
+    logging_module = f"{package_name}.logging_utils"
+    if logging_module in sys.modules:
+        log_info = sys.modules[logging_module].log_info
+        log_error = sys.modules[logging_module].log_error
+    else:
+        # Fallback logging
+        def log_info(msg): print(f"INFO: {msg}")
+        def log_error(msg): print(f"ERROR: {msg}")
+
+# Import settings
+try:
+    from settings import *
+except ImportError:
+    # Provide defaults if settings module is not available
+    PATH_TO_TAN_INPUTS = "/path/to/tan/inputs"
+    DEFAULT_COUNTRY_CODES = ["US", "CA", "GB"]
 
 # These Spark functions will need to be organised into a subfolder because some are Sedona
 
@@ -619,6 +636,7 @@ def ensure_literal(value):
 
 
 from pyspark.sql.functions import expr, col
+from sedona.sql import ST_Transform
 from pyspark.sql import SparkSession
 
 from pyspark.sql import functions as F
@@ -1117,9 +1135,14 @@ def backup_full_dataframe(df, step_name):
     log_info(f"{step_name}: Full DataFrame successfully backed up.")
 
 
-# ========================================
-# ESSENTIAL ATOMIC WRITE FUNCTIONS (working versions)
-# ========================================
+# Additional utility functions to add to useful_spark_functions.py
+
+import shutil
+import os
+import time
+from pathlib import Path
+from pyspark.sql import DataFrame
+from utilities.logging_utils import log_info, log_error
 
 
 def atomic_write_with_staging(
@@ -1133,6 +1156,33 @@ def atomic_write_with_staging(
 ) -> bool:
     """
     Performs atomic write operations using a staging directory to prevent partial/corrupted files.
+
+    This function:
+    1. Writes data to a staging directory first
+    2. Backs up existing data if present
+    3. Atomically moves staged data to final destination
+    4. Cleans up staging directory
+
+    Args:
+        df (DataFrame): Spark DataFrame to write
+        final_destination (str): Final destination path
+        staging_directory (str): Temporary staging directory path
+        file_format (str): Output format ("csv", "parquet", "json", etc.)
+        delimiter (str): CSV delimiter (only used for CSV format)
+        header (bool): Include header row (only used for CSV format)
+        mode (str): Write mode ("overwrite", "append", etc.)
+
+    Returns:
+        bool: True if successful, False otherwise
+
+    Example:
+        success = atomic_write_with_staging(
+            df=my_dataframe,
+            final_destination="/data/outputs/results",
+            staging_directory="/tmp/staging_12345",
+            file_format="csv",
+            delimiter="|"
+        )
     """
     try:
         log_info(f"Starting atomic write operation to {final_destination}")
@@ -1211,10 +1261,1191 @@ def atomic_write_with_staging(
             log_error(f"Error cleaning up staging directory: {cleanup_error}")
 
 
-def create_unique_staging_directory(base_path, operation_name="operation"):
+def create_debug_export_path(
+    base_debug_path: Path,
+    step_identifier: str,
+    export_type: str = "summary",
+    ensure_exists: bool = True,
+) -> Path:
     """
-    Creates a unique staging directory for atomic operations.
+    Creates consistent debug export paths to avoid copy-paste errors and ensure uniformity.
+
+    Args:
+        base_debug_path (Path): Base debug directory path
+        step_identifier (str): Identifier for the step (e.g., "step_1_initialization", "address_geocoding")
+        export_type (str): Type of export ("summary", "full_persisted", "breakdown", "sample", etc.)
+        ensure_exists (bool): Whether to create the parent directory if it doesn't exist
+
+    Returns:
+        Path: Complete path for the debug export
+
+    Example:
+        export_path = create_debug_export_path(
+            base_debug_path=DEBUG_SUBDIRECTORY,
+            step_identifier="address_geocoding_results",
+            export_type="geocoding_summary"
+        )
+        # Returns: /path/to/debug/address_geocoding_results_geocoding_summary
     """
-    staging_dir = Path(base_path) / f"staging_{operation_name}_{uuid.uuid4().hex}"
+    try:
+        # Sanitize step identifier (remove spaces, colons, make lowercase)
+        clean_step_id = (
+            step_identifier.lower().replace(" ", "_").replace(":", "").replace("-", "_")
+        )
+
+        # Create the full export path
+        export_path = base_debug_path / f"{clean_step_id}_{export_type}"
+
+        # Ensure parent directory exists if requested
+        if ensure_exists:
+            export_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return export_path
+
+    except Exception as e:
+        log_error(f"Error creating debug export path: {e}")
+        # Fallback to a simple path
+        return base_debug_path / f"export_{int(time.time())}"
+
+
+def backup_dataframe_with_metadata(
+    df: DataFrame,
+    backup_path: Path,
+    step_name: str,
+    additional_metadata: dict = None,
+    file_format: str = "csv",
+    delimiter: str = ",",
+) -> bool:
+    """
+    Backs up a DataFrame with metadata about the step and data characteristics.
+
+    Args:
+        df (DataFrame): DataFrame to backup
+        backup_path (Path): Path for the backup
+        step_name (str): Name of the processing step
+        additional_metadata (dict): Optional additional metadata to include
+        file_format (str): Output format for the backup
+        delimiter (str): Delimiter for CSV format
+
+    Returns:
+        bool: Success status
+    """
+    try:
+        log_info(f"Creating backup for step: {step_name}")
+
+        # Create metadata about the DataFrame
+        metadata = {
+            "step_name": step_name,
+            "record_count": df.count(),
+            "column_count": len(df.columns),
+            "backup_timestamp": int(time.time()),
+            "columns": df.columns,
+        }
+
+        if additional_metadata:
+            metadata.update(additional_metadata)
+
+        # Export the DataFrame
+        writer = df.write.mode("overwrite")
+
+        if file_format.lower() == "csv":
+            writer = (
+                writer.format("csv")
+                .option("header", "true")
+                .option("delimiter", delimiter)
+            )
+        else:
+            writer = writer.format(file_format)
+
+        writer.save(str(backup_path))
+
+        # Create a metadata file
+        metadata_path = backup_path.parent / f"{backup_path.name}_metadata.json"
+        import json
+
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        log_info(f"Backup completed successfully: {backup_path}")
+        log_info(f"Metadata saved to: {metadata_path}")
+        return True
+
+    except Exception as e:
+        log_error(f"Error creating backup for step {step_name}: {e}")
+        return False
+
+
+def validate_dataframe_before_export(df: DataFrame, step_name: str) -> dict:
+    """
+    Validates a DataFrame before export and returns validation metrics.
+
+    Args:
+        df (DataFrame): DataFrame to validate
+        step_name (str): Name of the current step
+
+    Returns:
+        dict: Validation results and metrics
+    """
+    try:
+        log_info(f"Validating DataFrame for step: {step_name}")
+
+        validation_results = {
+            "step_name": step_name,
+            "is_valid": True,
+            "record_count": 0,
+            "column_count": 0,
+            "null_columns": [],
+            "empty_columns": [],
+            "complex_columns": [],
+            "validation_timestamp": int(time.time()),
+            "validation_errors": [],
+        }
+
+        # Basic counts
+        try:
+            validation_results["record_count"] = df.count()
+            validation_results["column_count"] = len(df.columns)
+        except Exception as e:
+            validation_results["validation_errors"].append(
+                f"Error getting basic counts: {e}"
+            )
+            validation_results["is_valid"] = False
+
+        # Check for completely null columns
+        for col_name in df.columns:
+            try:
+                null_count = df.filter(col(col_name).isNull()).count()
+                if null_count == validation_results["record_count"]:
+                    validation_results["null_columns"].append(col_name)
+            except Exception as e:
+                validation_results["validation_errors"].append(
+                    f"Error checking nulls in {col_name}: {e}"
+                )
+
+        # Check for complex data types that might cause export issues
+        for field in df.schema.fields:
+            if isinstance(field.dataType, (StructType, ArrayType)):
+                validation_results["complex_columns"].append(field.name)
+
+        # Log validation summary
+        if validation_results["is_valid"]:
+            log_info(f"DataFrame validation passed for step: {step_name}")
+            log_info(f"  Records: {validation_results['record_count']:,}")
+            log_info(f"  Columns: {validation_results['column_count']}")
+            if validation_results["null_columns"]:
+                log_info(f"  Null columns: {validation_results['null_columns']}")
+            if validation_results["complex_columns"]:
+                log_info(f"  Complex columns: {validation_results['complex_columns']}")
+        else:
+            log_error(f"DataFrame validation failed for step: {step_name}")
+            for error in validation_results["validation_errors"]:
+                log_error(f"  {error}")
+
+        return validation_results
+
+    except Exception as e:
+        log_error(f"Error during DataFrame validation for step {step_name}: {e}")
+        return {
+            "step_name": step_name,
+            "is_valid": False,
+            "validation_errors": [str(e)],
+            "validation_timestamp": int(time.time()),
+        }
+
+
+def export_dataframe_with_validation(
+    df: DataFrame,
+    export_path: Path,
+    step_name: str,
+    file_format: str = "csv",
+    delimiter: str = ",",
+    validate_before_export: bool = True,
+    create_backup: bool = True,
+) -> bool:
+    """
+    Comprehensive DataFrame export function with validation, backup, and error handling.
+
+    Args:
+        df (DataFrame): DataFrame to export
+        export_path (Path): Path for export
+        step_name (str): Name of the processing step
+        file_format (str): Output format
+        delimiter (str): Delimiter for CSV
+        validate_before_export (bool): Whether to validate before export
+        create_backup (bool): Whether to create a backup
+
+    Returns:
+        bool: Success status
+    """
+    try:
+        log_info(f"Starting comprehensive export for step: {step_name}")
+
+        # Validate DataFrame if requested
+        if validate_before_export:
+            validation_results = validate_dataframe_before_export(df, step_name)
+            if not validation_results["is_valid"]:
+                log_error(f"DataFrame validation failed - aborting export")
+                return False
+
+        # Prepare DataFrame for export (handle complex types, etc.)
+        prepared_df = prepare_dataframe_for_export(df)
+
+        # Create backup if requested
+        if create_backup:
+            backup_path = (
+                export_path.parent / f"{export_path.name}_backup_{int(time.time())}"
+            )
+            backup_success = backup_dataframe_with_metadata(
+                df=prepared_df,
+                backup_path=backup_path,
+                step_name=step_name,
+                file_format=file_format,
+                delimiter=delimiter,
+            )
+            if not backup_success:
+                log_error("Backup creation failed - continuing with export")
+
+        # Perform the actual export
+        success = export_prepared_df_as_csv_to_path_using_delimiter(
+            df=prepared_df, write_path=export_path, delimiter=delimiter
+        )
+
+        if success:
+            log_info(
+                f"Comprehensive export completed successfully for step: {step_name}"
+            )
+        else:
+            log_error(f"Export failed for step: {step_name}")
+
+        return success
+
+    except Exception as e:
+        log_error(f"Error in comprehensive export for step {step_name}: {e}")
+        return False
+
+
+# Example usage functions that can be called from your main scripts:
+
+
+def setup_step_processing_environment(
+    base_debug_path: Path, staging_base_path: Path, step_metadata: dict
+) -> dict:
+    """
+    Sets up the processing environment for a step-based job.
+
+    Args:
+        base_debug_path (Path): Base path for debug exports
+        staging_base_path (Path): Base path for staging operations
+        step_metadata (dict): Dictionary containing step information
+
+    Returns:
+        dict: Environment configuration with paths and utilities
+    """
+    import uuid
+
+    # Create unique staging directory
+    staging_dir = staging_base_path / f"staging_{uuid.uuid4().hex}"
+
+    # Ensure directories exist
+    base_debug_path.mkdir(parents=True, exist_ok=True)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    environment = {
+        "debug_path": base_debug_path,
+        "staging_directory": str(staging_dir),
+        "step_metadata": step_metadata,
+        "export_functions": {
+            "create_path": lambda step_id, export_type: create_debug_export_path(
+                base_debug_path, step_id, export_type
+            ),
+            "atomic_write": lambda df, dest, format="csv": atomic_write_with_staging(
+                df, dest, str(staging_dir), format
+            ),
+            "comprehensive_export": lambda df, path, step: export_dataframe_with_validation(
+                df, path, step
+            ),
+        },
+    }
+
+    log_info("Step processing environment setup completed")
+    log_info(f"Debug path: {base_debug_path}")
+    log_info(f"Staging directory: {staging_dir}")
+
+    return environment
+
+
+# Additional utility functions to add to useful_spark_functions.py
+
+import shutil
+import os
+import time
+from pathlib import Path
+from pyspark.sql import DataFrame
+from utilities.logging_utils import log_info, log_error
+
+
+def atomic_write_with_staging(
+    df: DataFrame,
+    final_destination: str,
+    staging_directory: str,
+    file_format: str = "csv",
+    delimiter: str = ",",
+    header: bool = True,
+    mode: str = "overwrite",
+) -> bool:
+    """
+    Performs atomic write operations using a staging directory to prevent partial/corrupted files.
+
+    This function provides fail-safe file writing by:
+    1. Writing data to a staging directory first
+    2. Backing up existing data if present
+    3. Atomically moving staged data to final destination
+    4. Cleaning up staging directory
+
+    Args:
+        df (DataFrame): Spark DataFrame to write
+        final_destination (str): Final destination path
+        staging_directory (str): Temporary staging directory path
+        file_format (str, optional): Output format ("csv", "parquet", "json", etc.). Defaults to "csv".
+        delimiter (str, optional): CSV delimiter (only used for CSV format). Defaults to ",".
+        header (bool, optional): Include header row (only used for CSV format). Defaults to True.
+        mode (str, optional): Write mode ("overwrite", "append", etc.). Defaults to "overwrite".
+
+    Returns:
+        bool: True if successful, False otherwise
+
+    Example:
+        >>> # Basic usage
+        >>> success = atomic_write_with_staging(
+        ...     df=my_dataframe,
+        ...     final_destination="/data/outputs/results",
+        ...     staging_directory="/tmp/staging_12345"
+        ... )
+
+        >>> # With custom format and delimiter
+        >>> success = atomic_write_with_staging(
+        ...     df=geocoded_results,
+        ...     final_destination="/data/geocoding/final_results",
+        ...     staging_directory="/tmp/geocoding_staging",
+        ...     file_format="csv",
+        ...     delimiter="|",
+        ...     header=True
+        ... )
+
+        >>> # Parquet format
+        >>> success = atomic_write_with_staging(
+        ...     df=large_dataset,
+        ...     final_destination="/data/warehouse/partitioned_data",
+        ...     staging_directory="/tmp/warehouse_staging",
+        ...     file_format="parquet"
+        ... )
+    """
+    try:
+        log_info(f"Starting atomic write operation to {final_destination}")
+        log_info(f"Using staging directory: {staging_directory}")
+
+        # Ensure staging directory exists and is clean
+        if os.path.exists(staging_directory):
+            shutil.rmtree(staging_directory)
+        os.makedirs(staging_directory, exist_ok=True)
+
+        # Write to staging directory first
+        log_info(f"Writing data to staging directory")
+
+        writer = df.write.mode(mode)
+
+        if file_format.lower() == "csv":
+            writer = (
+                writer.format("csv")
+                .option("header", str(header).lower())
+                .option("delimiter", delimiter)
+            )
+        elif file_format.lower() == "parquet":
+            writer = writer.format("parquet")
+        elif file_format.lower() == "json":
+            writer = writer.format("json")
+        else:
+            writer = writer.format(file_format)
+
+        writer.save(staging_directory)
+        log_info("Successfully wrote data to staging directory")
+
+        # Create backup of existing data if it exists
+        if os.path.exists(final_destination):
+            backup_dir = f"{final_destination}_backup_{int(time.time())}"
+
+            if os.path.isdir(final_destination) and os.listdir(final_destination):
+                log_info(f"Backing up existing data to {backup_dir}")
+                shutil.move(final_destination, backup_dir)
+                log_info(f"Existing data backed up successfully")
+            else:
+                # Remove empty directory
+                shutil.rmtree(final_destination, ignore_errors=True)
+                log_info("Removed empty destination directory")
+
+        # Create destination directory
+        os.makedirs(final_destination, exist_ok=True)
+
+        # Atomically move files from staging to final destination
+        log_info("Moving staged files to final destination")
+        files_moved = 0
+
+        for item in os.listdir(staging_directory):
+            source_path = os.path.join(staging_directory, item)
+            dest_path = os.path.join(final_destination, item)
+
+            if os.path.isdir(source_path):
+                shutil.copytree(source_path, dest_path)
+            else:
+                shutil.copy2(source_path, dest_path)
+            files_moved += 1
+
+        log_info(f"Successfully moved {files_moved} items to final destination")
+        log_info(f"Atomic write operation completed successfully")
+        return True
+
+    except Exception as e:
+        log_error(f"Error in atomic write operation: {e}")
+        return False
+    finally:
+        # Always clean up staging directory
+        try:
+            if os.path.exists(staging_directory):
+                shutil.rmtree(staging_directory)
+                log_info("Cleaned up staging directory")
+        except Exception as cleanup_error:
+            log_error(f"Error cleaning up staging directory: {cleanup_error}")
+
+
+def create_debug_export_path(
+    base_debug_path: Path,
+    step_identifier: str,
+    export_type: str = "summary",
+    ensure_exists: bool = True,
+) -> Path:
+    """
+    Creates consistent debug export paths to avoid copy-paste errors and ensure uniformity.
+
+    This function standardizes debug export path naming across your pipeline steps,
+    preventing the common error-prone pattern of manually constructing paths with
+    string replacements.
+
+    Args:
+        base_debug_path (Path): Base debug directory path
+        step_identifier (str): Identifier for the step (e.g., "step_1_initialization", "address_geocoding")
+        export_type (str, optional): Type of export ("summary", "full_persisted", "breakdown", "sample", etc.). Defaults to "summary".
+        ensure_exists (bool, optional): Whether to create the parent directory if it doesn't exist. Defaults to True.
+
+    Returns:
+        Path: Complete path for the debug export
+
+    Example:
+        >>> from pathlib import Path
+        >>>
+        >>> # Basic usage
+        >>> export_path = create_debug_export_path(
+        ...     base_debug_path=Path("/data/debug/step_2"),
+        ...     step_identifier="address_geocoding_results",
+        ...     export_type="geocoding_summary"
+        ... )
+        >>> print(export_path)
+        /data/debug/step_2/address_geocoding_results_geocoding_summary
+
+        >>> # Multiple export types for same step
+        >>> summary_path = create_debug_export_path(DEBUG_PATH, "validation", "summary")
+        >>> breakdown_path = create_debug_export_path(DEBUG_PATH, "validation", "breakdown")
+        >>> sample_path = create_debug_export_path(DEBUG_PATH, "validation", "sample_data")
+
+        >>> # Handles messy step names automatically
+        >>> messy_path = create_debug_export_path(
+        ...     DEBUG_PATH,
+        ...     "Step 5: Complex-Processing!",
+        ...     "results"
+        ... )
+        >>> print(messy_path)
+        /data/debug/step_5_complex_processing_results
+    """
+    try:
+        # Sanitize step identifier (remove spaces, colons, make lowercase)
+        clean_step_id = (
+            step_identifier.lower().replace(" ", "_").replace(":", "").replace("-", "_")
+        )
+
+        # Create the full export path
+        export_path = base_debug_path / f"{clean_step_id}_{export_type}"
+
+        # Ensure parent directory exists if requested
+        if ensure_exists:
+            export_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return export_path
+
+    except Exception as e:
+        log_error(f"Error creating debug export path: {e}")
+        # Fallback to a simple path
+        return base_debug_path / f"export_{int(time.time())}"
+
+
+def backup_dataframe_with_metadata(
+    df: DataFrame,
+    backup_path: Path,
+    step_name: str,
+    additional_metadata: dict = None,
+    file_format: str = "csv",
+    delimiter: str = ",",
+) -> bool:
+    """
+    Backs up a DataFrame with metadata about the step and data characteristics.
+
+    This function creates not just a backup of your data, but also a metadata file
+    that contains useful information about when the backup was created, what step
+    it represents, and key statistics about the data.
+
+    Args:
+        df (DataFrame): DataFrame to backup
+        backup_path (Path): Path for the backup
+        step_name (str): Name of the processing step
+        additional_metadata (dict, optional): Optional additional metadata to include. Defaults to None.
+        file_format (str, optional): Output format for the backup. Defaults to "csv".
+        delimiter (str, optional): Delimiter for CSV format. Defaults to ",".
+
+    Returns:
+        bool: Success status
+
+    Example:
+        >>> # Basic backup
+        >>> success = backup_dataframe_with_metadata(
+        ...     df=geocoded_results,
+        ...     backup_path=Path("/backups/step_5_geocoding"),
+        ...     step_name="Address Geocoding Complete"
+        ... )
+
+        >>> # With additional metadata
+        >>> success = backup_dataframe_with_metadata(
+        ...     df=processed_data,
+        ...     backup_path=Path("/backups/api_processing"),
+        ...     step_name="API Processing Complete",
+        ...     additional_metadata={
+        ...         "api_calls_made": 1250,
+        ...         "success_rate": 87.5,
+        ...         "processing_time_minutes": 15.3,
+        ...         "data_source": "nominatim_api"
+        ...     }
+        ... )
+
+        >>> # The above creates:
+        >>> # /backups/api_processing/
+        >>> #   ├── part-00000-xxx.csv
+        >>> #   ├── _SUCCESS
+        >>> #   └── api_processing_metadata.json
+    """
+    try:
+        log_info(f"Creating backup for step: {step_name}")
+
+        # Create metadata about the DataFrame
+        metadata = {
+            "step_name": step_name,
+            "record_count": df.count(),
+            "column_count": len(df.columns),
+            "backup_timestamp": int(time.time()),
+            "backup_datetime": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "columns": df.columns,
+            "file_format": file_format,
+        }
+
+        if additional_metadata:
+            metadata.update(additional_metadata)
+
+        # Export the DataFrame
+        writer = df.write.mode("overwrite")
+
+        if file_format.lower() == "csv":
+            writer = (
+                writer.format("csv")
+                .option("header", "true")
+                .option("delimiter", delimiter)
+            )
+        else:
+            writer = writer.format(file_format)
+
+        writer.save(str(backup_path))
+
+        # Create a metadata file
+        metadata_path = backup_path.parent / f"{backup_path.name}_metadata.json"
+        import json
+
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        log_info(f"Backup completed successfully: {backup_path}")
+        log_info(f"Metadata saved to: {metadata_path}")
+        return True
+
+    except Exception as e:
+        log_error(f"Error creating backup for step {step_name}: {e}")
+        return False
+
+
+def validate_dataframe_before_export(df: DataFrame, step_name: str) -> dict:
+    """
+    Validates a DataFrame before export and returns validation metrics.
+
+    This function performs comprehensive pre-export validation to catch common
+    issues that could cause export failures or result in corrupted output files.
+
+    Args:
+        df (DataFrame): DataFrame to validate
+        step_name (str): Name of the current step
+
+    Returns:
+        dict: Validation results and metrics
+
+    Example:
+        >>> # Basic validation
+        >>> validation = validate_dataframe_before_export(
+        ...     df=final_results,
+        ...     step_name="Final Export Preparation"
+        ... )
+        >>>
+        >>> if validation["is_valid"]:
+        ...     print(f"✅ Validation passed: {validation['record_count']:,} records")
+        ... else:
+        ...     print("❌ Validation failed:")
+        ...     for error in validation["validation_errors"]:
+        ...         print(f"  - {error}")
+
+        >>> # Example validation result:
+        >>> {
+        ...     "step_name": "Final Export Preparation",
+        ...     "is_valid": True,
+        ...     "record_count": 10000,
+        ...     "column_count": 45,
+        ...     "null_columns": ["temp_processing_column"],
+        ...     "empty_columns": [],
+        ...     "complex_columns": ["parsed_json_struct", "nested_array"],
+        ...     "validation_errors": [],
+        ...     "validation_timestamp": 1640995200
+        ... }
+
+        >>> # Use validation results to make decisions
+        >>> if validation["complex_columns"]:
+        ...     log_info(f"Found complex columns: {validation['complex_columns']}")
+        ...     df = prepare_dataframe_for_export(df)  # Clean up complex types
+    """
+    try:
+        log_info(f"Validating DataFrame for step: {step_name}")
+
+        validation_results = {
+            "step_name": step_name,
+            "is_valid": True,
+            "record_count": 0,
+            "column_count": 0,
+            "null_columns": [],
+            "empty_columns": [],
+            "complex_columns": [],
+            "validation_timestamp": int(time.time()),
+            "validation_errors": [],
+        }
+
+        # Basic counts
+        try:
+            validation_results["record_count"] = df.count()
+            validation_results["column_count"] = len(df.columns)
+        except Exception as e:
+            validation_results["validation_errors"].append(
+                f"Error getting basic counts: {e}"
+            )
+            validation_results["is_valid"] = False
+
+        # Check for completely null columns
+        for col_name in df.columns:
+            try:
+                null_count = df.filter(col(col_name).isNull()).count()
+                if null_count == validation_results["record_count"]:
+                    validation_results["null_columns"].append(col_name)
+            except Exception as e:
+                validation_results["validation_errors"].append(
+                    f"Error checking nulls in {col_name}: {e}"
+                )
+
+        # Check for complex data types that might cause export issues
+        for field in df.schema.fields:
+            if isinstance(field.dataType, (StructType, ArrayType)):
+                validation_results["complex_columns"].append(field.name)
+
+        # Log validation summary
+        if validation_results["is_valid"]:
+            log_info(f"DataFrame validation passed for step: {step_name}")
+            log_info(f"  Records: {validation_results['record_count']:,}")
+            log_info(f"  Columns: {validation_results['column_count']}")
+            if validation_results["null_columns"]:
+                log_info(f"  Null columns: {validation_results['null_columns']}")
+            if validation_results["complex_columns"]:
+                log_info(f"  Complex columns: {validation_results['complex_columns']}")
+        else:
+            log_error(f"DataFrame validation failed for step: {step_name}")
+            for error in validation_results["validation_errors"]:
+                log_error(f"  {error}")
+
+        return validation_results
+
+    except Exception as e:
+        log_error(f"Error during DataFrame validation for step {step_name}: {e}")
+        return {
+            "step_name": step_name,
+            "is_valid": False,
+            "validation_errors": [str(e)],
+            "validation_timestamp": int(time.time()),
+        }
+
+
+def export_dataframe_with_validation(
+    df: DataFrame,
+    export_path: Path,
+    step_name: str,
+    file_format: str = "csv",
+    delimiter: str = ",",
+    validate_before_export: bool = True,
+    create_backup: bool = True,
+) -> bool:
+    """
+    Comprehensive DataFrame export function with validation, backup, and error handling.
+
+    This is a high-level export function that combines validation, preparation,
+    backup creation, and export into a single, robust operation.
+
+    Args:
+        df (DataFrame): DataFrame to export
+        export_path (Path): Path for export
+        step_name (str): Name of the processing step
+        file_format (str, optional): Output format. Defaults to "csv".
+        delimiter (str, optional): Delimiter for CSV. Defaults to ",".
+        validate_before_export (bool, optional): Whether to validate before export. Defaults to True.
+        create_backup (bool, optional): Whether to create a backup. Defaults to True.
+
+    Returns:
+        bool: Success status
+
+    Example:
+        >>> # Comprehensive export with all safety features
+        >>> success = export_dataframe_with_validation(
+        ...     df=final_geocoded_results,
+        ...     export_path=Path("/data/outputs/geocoding_final"),
+        ...     step_name="Final Geocoding Results Export",
+        ...     validate_before_export=True,
+        ...     create_backup=True
+        ... )
+
+        >>> # Quick export without validation/backup (for intermediate steps)
+        >>> success = export_dataframe_with_validation(
+        ...     df=intermediate_data,
+        ...     export_path=Path("/tmp/intermediate_step"),
+        ...     step_name="Intermediate Processing",
+        ...     validate_before_export=False,
+        ...     create_backup=False
+        ... )
+
+        >>> # Custom format export
+        >>> success = export_dataframe_with_validation(
+        ...     df=large_dataset,
+        ...     export_path=Path("/warehouse/partitioned_data"),
+        ...     step_name="Data Warehouse Export",
+        ...     file_format="parquet",
+        ...     validate_before_export=True
+        ... )
+    """
+    try:
+        log_info(f"Starting comprehensive export for step: {step_name}")
+
+        # Validate DataFrame if requested
+        if validate_before_export:
+            validation_results = validate_dataframe_before_export(df, step_name)
+            if not validation_results["is_valid"]:
+                log_error(f"DataFrame validation failed - aborting export")
+                return False
+
+        # Prepare DataFrame for export (handle complex types, etc.)
+        prepared_df = prepare_dataframe_for_export(df)
+
+        # Create backup if requested
+        if create_backup:
+            backup_path = (
+                export_path.parent / f"{export_path.name}_backup_{int(time.time())}"
+            )
+            backup_success = backup_dataframe_with_metadata(
+                df=prepared_df,
+                backup_path=backup_path,
+                step_name=step_name,
+                file_format=file_format,
+                delimiter=delimiter,
+            )
+            if not backup_success:
+                log_error("Backup creation failed - continuing with export")
+
+        # Perform the actual export
+        success = export_prepared_df_as_csv_to_path_using_delimiter(
+            df=prepared_df, write_path=export_path, delimiter=delimiter
+        )
+
+        if success:
+            log_info(
+                f"Comprehensive export completed successfully for step: {step_name}"
+            )
+        else:
+            log_error(f"Export failed for step: {step_name}")
+
+        return success
+
+    except Exception as e:
+        log_error(f"Error in comprehensive export for step {step_name}: {e}")
+        return False
+
+
+def setup_step_processing_environment(
+    base_debug_path: Path, staging_base_path: Path, step_metadata: dict
+) -> dict:
+    """
+    Sets up the processing environment for a step-based job.
+
+    This function creates a complete processing environment with all the paths,
+    directories, and utility functions needed for a step-based data processing pipeline.
+
+    Args:
+        base_debug_path (Path): Base path for debug exports
+        staging_base_path (Path): Base path for staging operations
+        step_metadata (dict): Dictionary containing step information
+
+    Returns:
+        dict: Environment configuration with paths and utilities
+
+    Example:
+        >>> # Setup environment for step 3 of your pipeline
+        >>> STEP_3_METADATA = {
+        ...     "step_3_analysis": {
+        ...         "name": "Geospatial Analysis",
+        ...         "description": "Distance calculations and walkability analysis"
+        ...     },
+        ...     "step_3_validation": {
+        ...         "name": "Results Validation",
+        ...         "description": "Validate analysis results"
+        ...     }
+        ... }
+        >>>
+        >>> env = setup_step_processing_environment(
+        ...     base_debug_path=Path("/data/debug/step_3"),
+        ...     staging_base_path=Path("/tmp/staging"),
+        ...     step_metadata=STEP_3_METADATA
+        ... )
+
+        >>> # Use the environment throughout your script
+        >>> export_path = env["export_functions"]["create_path"]("analysis_results", "summary")
+        >>> success = env["export_functions"]["atomic_write"](df, "/final/destination")
+        >>> success = env["export_functions"]["comprehensive_export"](df, export_path, "Analysis Step")
+
+        >>> # Environment contains:
+        >>> env = {
+        ...     "debug_path": Path("/data/debug/step_3"),
+        ...     "staging_directory": "/tmp/staging/staging_abc123",
+        ...     "step_metadata": {...},
+        ...     "export_functions": {
+        ...         "create_path": <function>,
+        ...         "atomic_write": <function>,
+        ...         "comprehensive_export": <function>
+        ...     }
+        ... }
+    """
+    import uuid
+
+    # Create unique staging directory
+    staging_dir = staging_base_path / f"staging_{uuid.uuid4().hex}"
+
+    # Ensure directories exist
+    base_debug_path.mkdir(parents=True, exist_ok=True)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    environment = {
+        "debug_path": base_debug_path,
+        "staging_directory": str(staging_dir),
+        "step_metadata": step_metadata,
+        "export_functions": {
+            "create_path": lambda step_id, export_type: create_debug_export_path(
+                base_debug_path, step_id, export_type
+            ),
+            "atomic_write": lambda df, dest, format="csv": atomic_write_with_staging(
+                df, dest, str(staging_dir), format
+            ),
+            "comprehensive_export": lambda df, path, step: export_dataframe_with_validation(
+                df, path, step
+            ),
+        },
+    }
+
+    log_info("Step processing environment setup completed")
+    log_info(f"Debug path: {base_debug_path}")
+    log_info(f"Staging directory: {staging_dir}")
+
+    return environment
+
+
+# Additional functions to add to useful_spark_functions.py
+
+
+def setup_hdfs_geocoding_environment(
+    data_path: str,
+    app_name: str = "NominatimGeocodingPipeline",
+    log_info_func=None,
+    log_error_func=None,
+    hash_func=None,
+    quick_signature_func=None,
+    **kwargs,
+):
+    """
+    Sets up HDFS-aware distributed environment specifically optimized for geocoding workloads.
+
+    Args:
+        data_path (str): Path to the input data
+        app_name (str): Name for the Spark application
+        log_info_func: Logging function for info messages
+        log_error_func: Logging function for error messages
+        hash_func: Hash function for file integrity
+        quick_signature_func: Quick signature function for files
+        **kwargs: Additional configuration options
+
+    Returns:
+        tuple: (spark_session, sedona_context, effective_data_path, dependencies_info)
+    """
+    try:
+        from utilities.hdfs import (
+            create_geocoding_config,
+            setup_distributed_environment,
+        )
+        from sedona.sql import SedonaContext
+
+        # Import logging functions if not provided
+        if log_info_func is None:
+            from utilities.logging_utils import log_info as log_info_func
+        if log_error_func is None:
+            from utilities.logging_utils import log_error as log_error_func
+
+        log_info_func("Setting up HDFS-aware distributed environment")
+
+        # Create HDFS configuration optimized for geocoding workloads
+        hdfs_config = create_geocoding_config(
+            data_path=data_path,
+            app_name=app_name,
+            log_info_func=log_info_func,
+            log_error_func=log_error_func,
+            hash_func=hash_func,
+            quick_signature_func=quick_signature_func,
+            num_executors=kwargs.get("num_executors", 4),
+            executor_cores=kwargs.get("executor_cores", 2),
+            executor_memory=kwargs.get("executor_memory", "2g"),
+            network_timeout=kwargs.get("network_timeout", "1200s"),
+        )
+
+        # Setup distributed environment
+        spark, effective_data_path, dependencies_info = setup_distributed_environment(
+            hdfs_config, data_path=data_path
+        )
+
+        if spark is None:
+            log_error_func("Failed to create Spark session")
+            return None, None, None, None
+
+        # Create Sedona context
+        sedona = SedonaContext.create(spark)
+
+        log_info_func(
+            f"Successfully created distributed environment - Data path: {effective_data_path}"
+        )
+        return spark, sedona, effective_data_path, dependencies_info
+
+    except ImportError as e:
+        log_error_func(f"HDFS utilities not available: {e}")
+        # Fallback to manual session creation
+        return setup_fallback_spark_session(app_name, log_info_func, log_error_func)
+    except Exception as e:
+        log_error_func(f"Error setting up distributed environment: {e}")
+        return setup_fallback_spark_session(app_name, log_info_func, log_error_func)
+
+
+def setup_fallback_spark_session(app_name, log_info_func, log_error_func):
+    """
+    Fallback Spark session creation when HDFS is not available.
+    """
+    try:
+        from pyspark.sql import SparkSession
+        from sedona.sql import SedonaContext
+
+        spark = SparkSession.builder.appName(app_name).getOrCreate()
+        spark.sparkContext.setLogLevel("WARN")
+        sedona = SedonaContext.create(spark)
+
+        log_info_func("Created fallback Spark session (HDFS not available)")
+        return spark, sedona, None, None
+
+    except Exception as e:
+        log_error_func(f"Failed to create fallback Spark session: {e}")
+        return None, None, None, None
+
+
+def create_geocoding_staging_directory(base_output_dir, step_name="nominatim"):
+    """
+    Creates a unique staging directory for geocoding operations.
+
+    Args:
+        base_output_dir: Base output directory path
+        step_name (str): Name of the geocoding step
+
+    Returns:
+        str: Path to the staging directory
+    """
+    import uuid
+    from pathlib import Path
+
+    staging_dir = Path(base_output_dir) / f"staging_{step_name}_{uuid.uuid4().hex}"
     staging_dir.mkdir(parents=True, exist_ok=True)
     return str(staging_dir)
+
+
+def export_geocoding_results_with_staging(
+    df: DataFrame,
+    final_destination: str,
+    staging_base_path: str,
+    step_name: str,
+    file_format: str = "csv",
+    delimiter: str = ",",
+    create_backup: bool = True,
+) -> bool:
+    """
+    Exports geocoding results using atomic staging operations with full validation.
+
+    Args:
+        df (DataFrame): DataFrame to export
+        final_destination (str): Final export destination
+        staging_base_path (str): Base path for staging operations
+        step_name (str): Name of the processing step
+        file_format (str): Output format
+        delimiter (str): CSV delimiter
+        create_backup (bool): Whether to create backup
+
+    Returns:
+        bool: Success status
+    """
+    try:
+        from utilities.logging_utils import log_info, log_error
+
+        log_info(f"Starting geocoding results export for step: {step_name}")
+
+        # Create staging directory
+        staging_dir = create_geocoding_staging_directory(staging_base_path, step_name)
+
+        # Use existing atomic write function with comprehensive preparation
+        success = atomic_write_with_staging(
+            df=df,
+            final_destination=final_destination,
+            staging_directory=staging_dir,
+            file_format=file_format,
+            delimiter=delimiter,
+            header=True,
+            mode="overwrite",
+        )
+
+        if success:
+            log_info(f"Successfully exported geocoding results for step: {step_name}")
+        else:
+            log_error(f"Failed to export geocoding results for step: {step_name}")
+
+        return success
+
+    except Exception as e:
+        log_error(f"Error in geocoding results export: {e}")
+        return False
+
+
+# Removed process_geocoding_json_results - use existing flatten_json_column_and_join_back_to_df directly
+
+
+def tabulate_geocoding_results(
+    df: DataFrame, granularity_column: str, final_result_column: str
+) -> None:
+    """
+    Creates comprehensive tabulation of geocoding results using existing utilities.
+
+    Args:
+        df (DataFrame): DataFrame with geocoding results
+        granularity_column (str): Column containing geocoding granularity info
+        final_result_column (str): Column containing final geocoding results
+    """
+    try:
+        from utilities.logging_utils import log_info
+
+        log_info("Tabulating geocoding results")
+
+        # Use existing tabulation functions
+        # Granularity breakdown
+        granularity_df = df.groupBy(granularity_column).count()
+        granularity_df.show(truncate=False)
+
+        # Null vs non-null for final results
+        tabulation_df = tabulate_null_vs_not_null(df, final_result_column)
+        if tabulation_df:
+            tabulation_df.show(truncate=False)
+
+        # Get final counts
+        final_geocoded_count = df.filter(col(final_result_column).isNotNull()).count()
+        total_count = df.count()
+
+        log_info(
+            f"Final geocoding results: {final_geocoded_count:,} out of {total_count:,} records"
+        )
+        log_info(f"Success rate: {(final_geocoded_count / total_count * 100):.2f}%")
+
+    except Exception as e:
+        from utilities.logging_utils import log_error
+
+        log_error(f"Error tabulating geocoding results: {e}")
+
+
+def create_geocoding_summary_report(df: DataFrame, step_metadata: dict) -> DataFrame:
+    """
+    Creates a summary report of geocoding operations using existing summary utilities.
+
+    Args:
+        df (DataFrame): DataFrame with geocoding results
+        step_metadata (dict): Metadata about the geocoding steps
+
+    Returns:
+        DataFrame: Summary report DataFrame
+    """
+    try:
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.getActiveSession()
+        total_records = df.count()
+
+        # Create summary data
+        summary_data = [
+            ("Total Records", str(total_records)),
+            ("Processing Steps", str(len(step_metadata))),
+            ("Timestamp", str(int(time.time()))),
+        ]
+
+        # Add step-specific metadata
+        for step_name, step_info in step_metadata.items():
+            summary_data.append(
+                (f"Step: {step_name}", step_info.get("description", "N/A"))
+            )
+
+        # Use existing summary DataFrame utility
+        summary_df = prepare_summary_dataframe(
+            data_tuples=summary_data, column_names=["Metric", "Value"]
+        )
+
+        return summary_df
+
+    except Exception as e:
+        from utilities.logging_utils import log_error
+
+        log_error(f"Error creating geocoding summary report: {e}")
+        return None
