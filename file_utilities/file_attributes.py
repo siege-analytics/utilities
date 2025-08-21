@@ -138,7 +138,7 @@ def count_total_rows_in_file_pythonically(target_file_path: pathlib.Path) -> int
     """
 
     with open(target_file_path, "rb") as f:
-        total_rows_count = sum(1 for line in target_file_path)
+        total_rows_count = sum(1 for line in f)
 
     return total_rows_count
 
@@ -151,7 +151,7 @@ def count_empty_rows_in_file_pythonically(target_file_path: pathlib.Path) -> int
     """
     with open(target_file_path, "r") as f:
         total_empty_rows_count = sum(
-            1 for line in target_file_path if len(line.strip()) < 1
+            1 for line in f if len(line.strip()) < 1
         )
 
     return total_empty_rows_count
