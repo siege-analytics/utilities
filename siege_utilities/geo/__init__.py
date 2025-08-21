@@ -1,117 +1,88 @@
-"""
-Geographic utilities for spatial data analysis, Census data access, and mapping.
+"""Geospatial and Census data utilities for Siege Analytics."""
 
-This package provides comprehensive tools for working with geographic data,
-including enhanced Census utilities, intelligent data selection, and spatial analysis.
-"""
+# Import all major functionality from submodules
 
+# Geocoding functionality
+from .geocoding import (
+    concatenate_addresses,
+    use_nominatim_geocoder,
+    NominatimGeoClassifier
+)
+
+# Spatial data functionality
 from .spatial_data import (
+    get_census_data,
+    get_census_boundaries,
+    download_osm_data,
     CensusDirectoryDiscovery,
-    CensusDataSource,
     SpatialDataSource,
+    CensusDataSource,
     GovernmentDataSource,
     OpenStreetMapDataSource
 )
 
+# Spatial transformations
+from .spatial_transformations import (
+    convert_spatial_format,
+    SpatialDataTransformer,
+    PostGISConnector,
+    DuckDBConnector
+)
+
+# Census data selection
+from .census_data_selector import (
+    get_census_data_selector,
+    select_census_datasets,
+    CensusDataSelector
+)
+
+# Census dataset mapping
 from .census_dataset_mapper import (
-    CensusDatasetMapper,
+    get_census_dataset_mapper,
+    get_best_dataset_for_analysis,
     SurveyType,
     GeographyLevel,
     DataReliability,
     CensusDataset,
     DatasetRelationship,
-    get_census_dataset_mapper,
-    get_best_dataset_for_analysis,
-    compare_census_datasets
+    CensusDatasetMapper
 )
 
-from .census_data_selector import (
-    CensusDataSelector,
-    get_census_data_selector,
-    select_census_datasets,
-    get_analysis_approach
-)
-
-from .spatial_transformations import (
-    SpatialTransformer,
-    DUCKDB_AVAILABLE
-)
-
-from .geocoding import (
-    Geocoder,
-    get_geocoder
-)
-
+# Define what gets exported when using 'from siege_utilities.geo import *'
 __all__ = [
-    # Core spatial data classes
+    # Geocoding
+    'concatenate_addresses',
+    'use_nominatim_geocoder', 
+    'NominatimGeoClassifier',
+    
+    # Spatial data
+    'get_census_data',
+    'get_census_boundaries',
+    'download_osm_data',
     'CensusDirectoryDiscovery',
-    'CensusDataSource', 
     'SpatialDataSource',
+    'CensusDataSource', 
     'GovernmentDataSource',
     'OpenStreetMapDataSource',
     
-    # Census dataset mapping and intelligence
-    'CensusDatasetMapper',
+    # Spatial transformations
+    'convert_spatial_format',
+    'SpatialDataTransformer',
+    'PostGISConnector',
+    'DuckDBConnector',
+    
+    # Census data selection
+    'get_census_data_selector',
+    'select_census_datasets',
+    'CensusDataSelector',
+    
+    # Census dataset mapping
+    'get_census_dataset_mapper',
+    'get_best_dataset_for_analysis',
     'SurveyType',
     'GeographyLevel', 
     'DataReliability',
     'CensusDataset',
     'DatasetRelationship',
-    'get_census_dataset_mapper',
-    'get_best_dataset_for_analysis',
-    'compare_census_datasets',
-    
-    # Intelligent data selection
-    'CensusDataSelector',
-    'get_census_data_selector',
-    'select_census_datasets',
-    'get_analysis_approach',
-    
-    # Spatial transformations
-    'SpatialTransformer',
-    'DUCKDB_AVAILABLE',
-    
-    # Geocoding
-    'Geocoder',
-    'get_geocoder'
+    'CensusDatasetMapper'
 ]
-
-# Package metadata
-__version__ = "2.0.0"
-__author__ = "Siege Analytics"
-__description__ = "Enhanced geographic utilities with intelligent Census data selection"
-
-# Convenience function for quick access to Census intelligence
-def get_census_intelligence():
-    """
-    Get a comprehensive Census intelligence system.
-    
-    Returns:
-        tuple: (CensusDatasetMapper, CensusDataSelector) for full Census data intelligence
-    """
-    from .census_dataset_mapper import get_census_dataset_mapper
-    from .census_data_selector import get_census_data_selector
-    
-    return get_census_dataset_mapper(), get_census_data_selector()
-
-# Quick access to common Census data selection
-def quick_census_selection(analysis_type: str, geography_level: str):
-    """
-    Quick access to Census data selection recommendations.
-    
-    Args:
-        analysis_type: Type of analysis (e.g., "demographics", "housing", "business")
-        geography_level: Required geography level (e.g., "tract", "county", "state")
-    
-    Returns:
-        dict: Dataset recommendations and analysis approach
-    """
-    from .census_data_selector import select_census_datasets, get_analysis_approach
-    
-    recommendations = select_census_datasets(analysis_type, geography_level)
-    approach = get_analysis_approach(analysis_type, geography_level)
-    
-    return {
-        "recommendations": recommendations,
-        "analysis_approach": approach
-    }

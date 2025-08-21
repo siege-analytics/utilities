@@ -133,8 +133,8 @@ class UserConfigManager:
     
     def setup_initial_profile(self):
         """Interactive setup for initial user profile."""
-        print("🚀 Welcome to Siege Utilities!")
-        print("Let's set up your user profile.\n")
+        log_info("🚀 Welcome to Siege Utilities!")
+        log_info("Let's set up your user profile.\n")
         
         # Get user information
         username = input("Username (for file naming): ").strip()

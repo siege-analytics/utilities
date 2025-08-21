@@ -192,7 +192,7 @@ def get_census_boundaries(year: int = 2020,
         )
         
         if boundaries is None or len(boundaries) == 0:
-            print("❌ No boundaries returned from Census source")
+            log_info("❌ No boundaries returned from Census source")
             return None
         
         print(f"✅ Downloaded {len(boundaries)} {geographic_level} boundaries")
@@ -206,7 +206,7 @@ def get_census_boundaries(year: int = 2020,
                 boundaries = boundaries[boundaries[county_col] == county_fips]
                 print(f"📊 Filtered to {len(boundaries)} boundaries in county {county_fips}")
             else:
-                print("⚠️ No county column found, skipping county filter")
+                log_info("⚠️ No county column found, skipping county filter")
         
         return boundaries
         
@@ -241,8 +241,8 @@ def get_census_data(year: int = 2020,
         
         # This would integrate with existing Census data functions
         # For now, return a placeholder
-        print("⚠️ Census data retrieval not yet implemented")
-        print("   This function will integrate with existing Census data utilities")
+        log_info("⚠️ Census data retrieval not yet implemented")
+        log_info("   This function will integrate with existing Census data utilities")
         return None
         
     except Exception as e:
@@ -291,7 +291,7 @@ def join_boundaries_and_data(boundaries: gpd.GeoDataFrame,
         )
         
         if len(result) == 0:
-            print("❌ Join resulted in 0 records")
+            log_info("❌ Join resulted in 0 records")
             return None
         
         print(f"✅ Successfully joined data: {len(result)} records")
@@ -330,13 +330,13 @@ def create_sample_dataset(year: int = 2020,
     # Step 2: Get data (when implemented)
     data = get_census_data(year, 'demographics', geographic_level, state_fips, county_fips)
     if data is None:
-        print("⚠️ No Census data available, returning boundaries only")
+        log_info("⚠️ No Census data available, returning boundaries only")
         return boundaries if include_geometry else boundaries.drop(columns=['geometry'])
     
     # Step 3: Join boundaries and data
     result = join_boundaries_and_data(boundaries, data)
     if result is None:
-        print("⚠️ Join failed, returning boundaries only")
+        log_info("⚠️ Join failed, returning boundaries only")
         return boundaries if include_geometry else boundaries.drop(columns=['geometry'])
     
     return result
@@ -379,7 +379,7 @@ def get_census_county_sample(state_fips: str = "06",
             all_tracts.append(tract_data)
     
     if not all_tracts:
-        print("❌ No tract data generated")
+        log_info("❌ No tract data generated")
         return None
     
     # Combine all tracts

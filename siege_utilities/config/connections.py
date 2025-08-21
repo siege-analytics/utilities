@@ -5,14 +5,29 @@ Handles notebook connections, Spark connections, and their persistence.
 
 import json
 import pathlib
-import logging
+# Integrated logging system
+try:
+    from ..core.logging import setup_module_logging
+    setup_module_logging(globals(), __name__)
+except ImportError:
+    try:
+        from siege_utilities.core.logging import setup_module_logging
+        setup_module_logging(globals(), __name__)
+    except ImportError:
+        import logging
+        logger = logging.getLogger(__name__)
+        def log_info(msg): logger.info(msg)
+        def log_debug(msg): logger.debug(msg)
+        def log_warning(msg): logger.warning(msg)
+        def log_error(msg): logger.error(msg)
+        def log_critical(msg): logger.critical(msg)
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 import uuid
 import pickle
 import base64
 
-logger = logging.getLogger(__name__)
+
 
 
 def create_connection_profile(
@@ -345,7 +360,7 @@ def verify_connection_profile(
     Example:
         >>> result = siege_utilities.test_connection_profile("uuid-here")
         >>> if result['success']:
-        ...     print("Connection successful!")
+        ...     log_info("Connection successful!")
     """
     
     profile = load_connection_profile(connection_id, config_directory)

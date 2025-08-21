@@ -5,12 +5,27 @@ Handles client profiles, contact information, and associated design artifacts.
 
 import json
 import pathlib
-import logging
+# Integrated logging system
+try:
+    from ..core.logging import setup_module_logging
+    setup_module_logging(globals(), __name__)
+except ImportError:
+    try:
+        from siege_utilities.core.logging import setup_module_logging
+        setup_module_logging(globals(), __name__)
+    except ImportError:
+        import logging
+        logger = logging.getLogger(__name__)
+        def log_info(msg): logger.info(msg)
+        def log_debug(msg): logger.debug(msg)
+        def log_warning(msg): logger.warning(msg)
+        def log_error(msg): logger.error(msg)
+        def log_critical(msg): logger.critical(msg)
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import uuid
 
-logger = logging.getLogger(__name__)
+
 
 
 def create_client_profile(
@@ -427,7 +442,7 @@ def validate_client_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
         >>> profile = create_client_profile("Test", "TEST001", {"email": "test@example.com"})
         >>> validation = siege_utilities.validate_client_profile(profile)
         >>> if validation['is_valid']:
-        ...     print("Profile is valid")
+        ...     log_info("Profile is valid")
     """
     
     validation_result = {

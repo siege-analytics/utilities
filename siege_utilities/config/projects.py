@@ -8,7 +8,7 @@ import pathlib
 import logging
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
+
 
 # Import logging functions from main package
 try:
@@ -155,7 +155,7 @@ def setup_project_directories(config: Dict[str, Any]) -> bool:
         >>> config = create_project_config("My Project", "MP001")
         >>> success = siege_utilities.setup_project_directories(config)
         >>> if success:
-        ...     print("Project directories created")
+        ...     log_info("Project directories created")
     """
 
     try:

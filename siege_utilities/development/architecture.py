@@ -11,6 +11,15 @@ from typing import Dict, List, Any, Optional
 from collections import defaultdict
 import json
 
+# Import logging functions from main package
+try:
+    from siege_utilities import log_info, log_warning, log_error
+except ImportError:
+    # Fallback if main package not available yet
+    def log_info(message): print(f"INFO: {message}")
+    def log_warning(message): print(f"WARNING: {message}")
+    def log_error(message): print(f"ERROR: {message}")
+
 def analyze_package_structure(package_name: str = "siege_utilities") -> Dict[str, Any]:
     """
     Analyze the structure of the siege_utilities package.
@@ -211,9 +220,9 @@ def generate_architecture_diagram(output_format: str = "text",
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(diagram)
-            print(f"Architecture diagram saved to: {output_file}")
+            log_info(f"Architecture diagram saved to: {output_file}")
         except Exception as e:
-            print(f"Warning: Could not save to {output_file}: {e}")
+            log_warning(f"Could not save to {output_file}: {e}")
     
     return diagram
 

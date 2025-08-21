@@ -9,82 +9,39 @@ import time
 import hashlib
 from typing import Optional, Tuple, Dict
 
-
-def log_info(msg):
-    """""\"
-Log a message using the info level.
-
-Part of Siege Utilities Logging module.
-Auto-discovered and available at package level.
-
-Returns:
-    Description needed
-
-Example:
-    >>> import siege_utilities
-    >>> result = siege_utilities.log_info()
-    >>> print(result)
-
-Note:
-    This function is auto-discovered and available without imports
-    across all siege_utilities modules.
-""\""""
-    print(f'INFO: {msg}')
-
-
-def log_error(msg):
-    """""\"
-Log a message using the error level.
-
-Part of Siege Utilities Logging module.
-Auto-discovered and available at package level.
-
-Returns:
-    Description needed
-
-Example:
-    >>> import siege_utilities
-    >>> result = siege_utilities.log_error()
-    >>> print(result)
-
-Note:
-    This function is auto-discovered and available without imports
-    across all siege_utilities modules.
-""\""""
-    print(f'ERROR: {msg}')
+# Import logging functions from main package
+try:
+    from siege_utilities import log_info, log_warning, log_error
+except ImportError:
+    # Fallback if main package not available yet
+    def log_info(message): print(f"INFO: {message}")
+    def log_warning(message): print(f"WARNING: {message}")
+    def log_error(message): print(f"ERROR: {message}")
 
 
 def get_quick_file_signature(file_path):
-    """""\"
-Perform file operations: get quick file signature.
-
-Part of Siege Utilities File Operations module.
-Auto-discovered and available at package level.
-
-Returns:
-    Description needed
-
-Example:
-    >>> import siege_utilities
-    >>> result = siege_utilities.get_quick_file_signature()
-    >>> print(result)
-
-Note:
-    This function is auto-discovered and available without imports
-    across all siege_utilities modules.
-""\""""
+    """
+    Get quick file signature based on size and modification time.
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        File signature string or 'error' if failed
+    """
     try:
         stat = pathlib.Path(file_path).stat()
         return f'{stat.st_size}_{stat.st_mtime}'
-    except:
+    except Exception as e:
+        log_error(f"Error getting file signature for {file_path}: {e}")
         return 'error'
 
 
 def check_hdfs_status():
     """Check if HDFS is accessible"""
     try:
-        result = subprocess.run(['hdfs', 'dfs', '-ls', '/'], capture_output
-            =True, text=True, timeout=10)
+        result = subprocess.run(['hdfs', 'dfs', '-ls', '/'], capture_output=True, text=True, timeout=10)
         return result.returncode == 0
-    except:
+    except Exception as e:
+        log_error(f"Error checking HDFS status: {e}")
         return False

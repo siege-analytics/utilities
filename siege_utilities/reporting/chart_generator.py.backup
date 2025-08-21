@@ -417,287 +417,64 @@ class ChartGenerator:
             return self._create_placeholder_chart(width, height, f"Map Error: {str(e)}")
 
     def create_bivariate_choropleth(self, data: Union[pd.DataFrame, Dict[str, Any]],
-                                   location_column: str, 
-                                   value_column1: str, 
-                                   value_column2: str,
-                                   geo_data=None,
-                                   title: str = '',
-                                   bins: int = 3,
-                                   color1: str = 'Blues',
-                                   color2: str = 'Reds', 
-                                   basemap: bool = True,
-                                   legend: bool = True,
-                                   width: float = 12.0, 
-                                   height: float = 8.0,
-                                   save_path: str = None) -> Union[Image, str]:
+                                   location_column: str, value_column1: str, value_column2: str,
+                                   title: str = "", width: float = 8.0, height: float = 6.0) -> Image:
         """
-        Create a proper bivariate choropleth map with two-dimensional color scheme.
-        
-        Based on https://github.com/mikhailsirenko/bivariate-choropleth methodology.
-        Creates maps with two variables represented through bivariate color schemes,
-        proper legends, and optional basemaps.
+        Create a bivariate choropleth map from data using Folium.
         
         Args:
-            data: DataFrame with location and value columns
-            location_column: Column name for geographic identifiers
-            value_column1: First variable column name (x-axis in legend)
-            value_column2: Second variable column name (y-axis in legend)  
-            geo_data: GeoDataFrame or path to shapefile for proper mapping
+            data: DataFrame or dictionary with data
+            location_column: Column name for locations (country codes, state names, etc.)
+            value_column1: Column name for the first value to color by
+            value_column2: Column name for the second value to color by
             title: Map title
-            bins: Number of bins for each variable (default: 3 for 3x3 color matrix)
-            color1: Base color for first variable (matplotlib colormap name)
-            color2: Base color for second variable (matplotlib colormap name)
-            basemap: Whether to add contextual basemap
-            legend: Whether to include bivariate legend
-            width: Figure width in inches
-            height: Figure height in inches
-            save_path: Optional path to save the map
+            width: Map width in inches
+            height: Map height in inches
             
         Returns:
-            ReportLab Image object or path to saved file
-            
-        Example:
-            # Create bivariate choropleth of income vs population density
-            chart_gen = ChartGenerator()
-            result = chart_gen.create_bivariate_choropleth(
-                data=df,
-                location_column='state_code',
-                value_column1='median_income', 
-                value_column2='population_density',
-                title='Income vs Population Density by State',
-                bins=3,
-                color1='Blues',  # Income
-                color2='Reds',   # Population density
-                legend=True
-            )
+            ReportLab Image object
         """
+        if not FOLIUM_AVAILABLE:
+            return self._create_placeholder_chart(width, height, "Folium not available")
+        
         try:
-            import matplotlib.pyplot as plt
-            import matplotlib.colors as mcolors
-            import numpy as np
-            from matplotlib.patches import Rectangle
-            
             # Convert data to DataFrame if needed
             if isinstance(data, dict):
                 df = pd.DataFrame(data)
             else:
                 df = data.copy()
             
-            log.info(f'Creating bivariate choropleth for {len(df)} records')
+            # Create base map
+            m = folium.Map(location=[20, 0], zoom_start=2)
             
-            # Validate required columns
-            required_cols = [location_column, value_column1, value_column2]
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            if missing_cols:
-                raise ValueError(f'Missing columns: {missing_cols}')
+            # Add bivariate choropleth layer
+            folium.Choropleth(
+                geo_data=None,  # You'll need to provide GeoJSON data
+                name="bivariate_choropleth",
+                data=df,
+                columns=[location_column, value_column1, value_column2],
+                key_on="feature.id",
+                fill_color="YlOrRd",
+                fill_opacity=0.7,
+                line_opacity=0.2,
+                legend_name=f"{value_column1} vs {value_column2}"
+            ).add_to(m)
             
-            # Remove rows with missing values
-            df_clean = df[required_cols].dropna()
-            n_dropped = len(df) - len(df_clean)
-            if n_dropped > 0:
-                log.warning(f'Dropped {n_dropped} rows with missing values')
+            # Add layer control
+            folium.LayerControl().add_to(m)
             
-            # Step 1: Classify both variables into bins (quantiles)
-            try:
-                df_clean['var1_class'] = pd.qcut(df_clean[value_column1], q=bins, labels=False, duplicates='drop')
-            except ValueError:
-                # Fallback to equal width if quantiles fail
-                df_clean['var1_class'] = pd.cut(df_clean[value_column1], bins=bins, labels=False)
+            # Save map to temporary file
+            temp_map_path = Path.home() / ".siege_utilities" / "temp_map.html"
+            temp_map_path.parent.mkdir(parents=True, exist_ok=True)
+            m.save(str(temp_map_path))
             
-            try:
-                df_clean['var2_class'] = pd.qcut(df_clean[value_column2], q=bins, labels=False, duplicates='drop')
-            except ValueError:
-                df_clean['var2_class'] = pd.cut(df_clean[value_column2], bins=bins, labels=False)
+            # Convert HTML to image (this is a simplified approach)
+            # In practice, you might want to use selenium or similar to render the HTML
+            return self._create_placeholder_chart(width, height, "Bivariate Choropleth Map - HTML file saved")
             
-            # Step 2: Create bivariate color matrix
-            def create_bivariate_colormap(color1, color2, bins):
-                """Create a bivariate color matrix mixing two colormaps."""
-                # Get base colormaps
-                try:
-                    cmap1 = plt.cm.get_cmap(color1)  
-                    cmap2 = plt.cm.get_cmap(color2)
-                except:
-                    # Fallback to safe defaults
-                    cmap1 = plt.cm.Blues
-                    cmap2 = plt.cm.Reds
-                
-                # Create color matrix
-                colors = np.zeros((bins, bins, 4))  # RGBA
-                
-                for i in range(bins):
-                    for j in range(bins):
-                        # Get colors from each map (normalize to 0-1)
-                        intensity1 = 0.3 + 0.7 * i / (bins - 1) if bins > 1 else 0.5
-                        intensity2 = 0.3 + 0.7 * j / (bins - 1) if bins > 1 else 0.5
-                        
-                        c1 = cmap1(intensity1)
-                        c2 = cmap2(intensity2)
-                        
-                        # Blend colors (weighted average)
-                        colors[i, j] = [(c1[k] + c2[k]) / 2 for k in range(4)]
-                
-                return colors
-            
-            bivar_colors = create_bivariate_colormap(color1, color2, bins)
-            
-            # Step 3: Assign colors to data based on classification
-            def get_bivar_color(row):
-                i = int(row['var1_class']) if not pd.isna(row['var1_class']) else 0
-                j = int(row['var2_class']) if not pd.isna(row['var2_class']) else 0
-                i = min(max(i, 0), bins - 1)  # Clamp to valid range
-                j = min(max(j, 0), bins - 1)
-                return bivar_colors[i, j]
-            
-            df_clean['color'] = df_clean.apply(get_bivar_color, axis=1)
-            
-            # Step 4: Create the plot
-            fig, ax = plt.subplots(figsize=(width, height))
-            
-            # If we have geographic data, create a proper map
-            if geo_data is not None:
-                try:
-                    import geopandas as gpd
-                    
-                    # Load geo_data if it's a path
-                    if isinstance(geo_data, str):
-                        gdf = gpd.read_file(geo_data)
-                    else:
-                        gdf = geo_data.copy()
-                    
-                    # Merge with data (try common column names)
-                    merge_column = gdf.columns[0]  # First column as default
-                    for col in gdf.columns:
-                        if col.lower() in [location_column.lower(), 'id', 'name', 'code']:
-                            merge_column = col
-                            break
-                    
-                    merged = gdf.merge(df_clean, left_on=merge_column, right_on=location_column, how='left')
-                    
-                    # Create color list for plotting
-                    colors_for_plot = []
-                    for idx, row in merged.iterrows():
-                        if hasattr(row.get('color'), '__iter__') and len(row.get('color', [])) >= 3:
-                            colors_for_plot.append(row['color'])
-                        else:
-                            colors_for_plot.append([0.9, 0.9, 0.9, 1.0])  # Light gray for missing data
-                    
-                    # Plot choropleth
-                    merged.plot(ax=ax, color=colors_for_plot, edgecolor='white', linewidth=0.5)
-                    
-                    # Add basemap if requested
-                    if basemap:
-                        try:
-                            import contextily as ctx
-                            # Reproject to Web Mercator for basemap
-                            if merged.crs != 'EPSG:3857':
-                                merged_proj = merged.to_crs('EPSG:3857')
-                                ctx.add_basemap(ax, crs=merged_proj.crs, alpha=0.3)
-                        except Exception as basemap_error:
-                            log.warning(f'Could not add basemap: {basemap_error}')
-                    
-                    # Set proper map extent
-                    ax.set_xlim(merged.total_bounds[0], merged.total_bounds[2])
-                    ax.set_ylim(merged.total_bounds[1], merged.total_bounds[3])
-                    
-                except Exception as geo_error:
-                    log.warning(f'Geographic plotting failed: {geo_error}')
-                    # Fallback to scatter plot
-                    colors_list = [list(color) for color in df_clean['color']]
-                    ax.scatter(df_clean[value_column1], df_clean[value_column2], 
-                              c=colors_list, s=100, alpha=0.7, edgecolor='black', linewidth=0.5)
-                    ax.set_xlabel(value_column1, fontsize=12)
-                    ax.set_ylabel(value_column2, fontsize=12)
-            else:
-                # Create scatter plot representation
-                colors_list = [list(color) for color in df_clean['color']]
-                ax.scatter(df_clean[value_column1], df_clean[value_column2], 
-                          c=colors_list, s=100, alpha=0.7, edgecolor='black', linewidth=0.5)
-                ax.set_xlabel(value_column1, fontsize=12)  
-                ax.set_ylabel(value_column2, fontsize=12)
-            
-            # Step 5: Add bivariate legend
-            if legend:
-                # Create legend as inset
-                legend_ax = fig.add_axes([0.02, 0.02, 0.25, 0.25])  # [left, bottom, width, height]
-                
-                # Draw legend squares
-                square_size = 1.0 / bins
-                for i in range(bins):
-                    for j in range(bins):
-                        rect = Rectangle((i * square_size, j * square_size), 
-                                       square_size, square_size,
-                                       facecolor=bivar_colors[i, j],
-                                       edgecolor='white', linewidth=1)
-                        legend_ax.add_patch(rect)
-                
-                # Legend styling
-                legend_ax.set_xlim(0, 1)
-                legend_ax.set_ylim(0, 1)
-                legend_ax.set_xlabel(f'Higher {value_column1} →', fontsize=9)
-                legend_ax.set_ylabel(f'Higher {value_column2} →', fontsize=9)
-                legend_ax.set_title('Legend', fontsize=10, fontweight='bold')
-                legend_ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-                
-                # Add border around legend
-                for spine in legend_ax.spines.values():
-                    spine.set_visible(True)
-                    spine.set_linewidth(1)
-                    spine.set_edgecolor('black')
-            
-            # Add title
-            if title:
-                ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
-            
-            # Style the main plot
-            if geo_data is not None:
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_aspect('equal')
-                
-                # Remove spines for cleaner map appearance
-                for spine in ax.spines.values():
-                    spine.set_visible(False)
-            else:
-                ax.grid(True, alpha=0.3)
-                ax.set_axisbelow(True)
-            
-            plt.tight_layout()
-            
-            # Save or convert to ReportLab Image
-            if save_path:
-                plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
-                log.info(f'Bivariate choropleth saved to {save_path}')
-                plt.close()
-                return save_path
-            else:
-                # Convert to ReportLab Image for reporting
-                try:
-                    from io import BytesIO
-                    from reportlab.platypus import Image as RLImage
-                    
-                    buffer = BytesIO()
-                    plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-                    buffer.seek(0)
-                    plt.close()
-                    
-                    image = RLImage(buffer, width=width*72, height=height*72)
-                    log.info('Bivariate choropleth created successfully')
-                    return image
-                except ImportError:
-                    # Fallback - save to temp file
-                    import tempfile
-                    temp_path = tempfile.mktemp(suffix='.png')
-                    plt.savefig(temp_path, dpi=300, bbox_inches='tight', facecolor='white')
-                    plt.close()
-                    log.info(f'Bivariate choropleth saved to temporary file: {temp_path}')
-                    return temp_path
-                    
         except Exception as e:
-            log.error(f'Error creating bivariate choropleth: {e}')
-            import traceback
-            log.error(f'Traceback: {traceback.format_exc()}')
-            return self._create_placeholder_chart(width, height, f'Bivariate choropleth error: {str(e)}')
-
+            log.error(f"Error creating bivariate choropleth map: {e}")
+            return self._create_placeholder_chart(width, height, f"Bivariate Choropleth Map Error: {str(e)}")
 
     def create_bivariate_choropleth_matplotlib(self, data: Union[pd.DataFrame, Dict[str, Any]],
                                              geodata: Union[gpd.GeoDataFrame, str, Path],
@@ -1360,6 +1137,79 @@ class ChartGenerator:
         except Exception as e:
             log.error(f"Error creating flow map: {e}")
             return self._create_placeholder_chart(width, height, f"Flow Map Error: {str(e)}")
+
+    def create_bivariate_choropleth(self, data: Union[pd.DataFrame, Dict[str, Any]],
+                                  location_column: str, value_column1: str, value_column2: str,
+                                  title: str = "", width: float = 8.0, height: float = 6.0) -> Image:
+        """
+        Create a bivariate choropleth map from data.
+        
+        Args:
+            data: DataFrame or dictionary with data
+            location_column: Column name for locations (country codes, state names, etc.)
+            value_column1: Column name for the first value to color by
+            value_column2: Column name for the second value to color by
+            title: Map title
+            width: Map width in inches
+            height: Map height in inches
+            
+        Returns:
+            ReportLab Image object
+        """
+        if not FOLIUM_AVAILABLE or not GEOPANDAS_AVAILABLE:
+            return self._create_placeholder_chart(width, height, "Folium or GeoPandas not available")
+        
+        try:
+            # Convert data to DataFrame if needed
+            if isinstance(data, dict):
+                df = pd.DataFrame(data)
+            else:
+                df = data.copy()
+            
+            # Ensure location_column is a string
+            if not isinstance(location_column, str):
+                location_column = str(location_column)
+            
+            # Ensure value_column1 and value_column2 are strings
+            if not isinstance(value_column1, str):
+                value_column1 = str(value_column1)
+            if not isinstance(value_column2, str):
+                value_column2 = str(value_column2)
+            
+            # Create base map
+            m = folium.Map(location=[20, 0], zoom_start=2)
+            
+            # Add bivariate choropleth layer
+            folium.Choropleth(
+                geo_data=None,  # You'll need to provide GeoJSON data
+                name="bivariate_choropleth",
+                data=df,
+                columns=[location_column, value_column1, value_column2],
+                key_on="feature.id",
+                fill_color=["YlOrRd", "BuPu"], # Example color schemes
+                fill_opacity=0.7,
+                line_opacity=0.2,
+                legend_name=f"{value_column1} vs {value_column2}",
+                bins=[0, 10, 20, 30, 40, 50], # Example bins for bivariate
+                overlay=True,
+                highlight=True
+            ).add_to(m)
+            
+            # Add layer control
+            folium.LayerControl().add_to(m)
+            
+            # Save map to temporary file
+            temp_map_path = Path.home() / ".siege_utilities" / "temp_map.html"
+            temp_map_path.parent.mkdir(parents=True, exist_ok=True)
+            m.save(str(temp_map_path))
+            
+            # Convert HTML to image (this is a simplified approach)
+            # In practice, you might want to use selenium or similar to render the HTML
+            return self._create_placeholder_chart(width, height, "Bivariate Choropleth Map - HTML file saved")
+            
+        except Exception as e:
+            log.error(f"Error creating bivariate choropleth map: {e}")
+            return self._create_placeholder_chart(width, height, f"Bivariate Choropleth Map Error: {str(e)}")
 
     def create_heatmap(self, data: Union[pd.DataFrame, Dict[str, Any]],
                       x_column: str = None, y_column: str = None, value_column: str = None,

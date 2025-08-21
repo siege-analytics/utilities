@@ -8,7 +8,7 @@ import pathlib
 import logging
 from typing import Dict, Any, Optional, List
 
-logger = logging.getLogger(__name__)
+
 
 
 def create_directory_structure(base_path: str, structure: Dict[str, Any]) -> Dict[str, str]:

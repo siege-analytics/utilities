@@ -68,23 +68,32 @@ Campaign data retrieval:
        print(f"Status: {campaign['status']}")
        print(f"Budget: {campaign['daily_budget']}")
 
-Ad insights and performance:
+Client association and batch processing:
 
-.. code_block:: python
+.. code-block:: python
 
-   # Get insights for ads
-   ad_ids = ['123456789', '987654321']
-   insights = siege_utilities.get_insights(
-       access_token, 
-       ad_ids, 
-       fields=['impressions', 'clicks', 'spend', 'ctr']
+   from siege_utilities.analytics.facebook_business import (
+       create_facebook_account_profile, batch_retrieve_facebook_data
    )
    
-   for ad_insight in insights:
-       print(f"Ad {ad_insight['ad_id']}:")
-       print(f"  Impressions: {ad_insight['impressions']}")
-       print(f"  Clicks: {ad_insight['clicks']}")
-       print(f"  CTR: {ad_insight['ctr']}%")
+   # Create client-associated Facebook profile
+   profile = create_facebook_account_profile(
+       client_id='client_001',
+       fb_account_id='act_123456789',
+       account_type='ad_account',
+       access_token='your_access_token'
+   )
+   
+   # Batch retrieve data for all client accounts
+   results = batch_retrieve_facebook_data(
+       client_id='client_001',
+       start_date='2024-01-01',
+       end_date='2024-01-31',
+       output_format='pandas'
+   )
+   
+   print(f"Processed {results['accounts_processed']} accounts")
+   print(f"Total rows: {results['total_rows']}")
 
 Google Analytics
 ---------------
@@ -111,22 +120,29 @@ Usage Examples
 
 Google Analytics data retrieval:
 
-.. code_block:: python
+.. code-block:: python
 
-   # Get analytics data
-   view_id = '123456789'
-   start_date = '2024-01-01'
-   end_date = '2024-01-31'
+   from siege_utilities.analytics.google_analytics import GoogleAnalyticsConnector
    
-   analytics_data = siege_utilities.get_analytics_data(
-       view_id, 
-       start_date, 
-       end_date,
-       metrics=['sessions', 'users', 'pageviews']
+   # Initialize connector with OAuth2 credentials
+   connector = GoogleAnalyticsConnector(
+       client_id='your_client_id',
+       client_secret='your_client_secret'
    )
    
-   print(f"Total sessions: {analytics_data['sessions']}")
-   print(f"Total users: {analytics_data['users']}")
+   # Authenticate (handles OAuth2 flow)
+   connector.authenticate('ga_token.json')
+   
+   # Get GA4 data with proper logging
+   ga4_data = connector.get_ga4_data(
+       property_id='123456789',
+       start_date='2024-01-01',
+       end_date='2024-01-31',
+       metrics=['sessions', 'activeUsers'],
+       dimensions=['country', 'city']
+   )
+   
+   print(f"Retrieved {len(ga4_data)} GA4 records")
 
 User behavior analysis:
 

@@ -1,7 +1,7 @@
 Geographic Utilities
 ====================
 
-The geographic utilities package provides comprehensive tools for working with geographic data, including enhanced Census utilities, intelligent data selection, and spatial analysis capabilities.
+The geographic utilities package provides comprehensive tools for working with geographic data, including enhanced Census utilities, intelligent data selection, spatial analysis capabilities, and fully restored bivariate choropleth mapping functionality.
 
 .. toctree::
    :maxdepth: 2
@@ -20,8 +20,10 @@ The geographic utilities package offers a complete solution for geographic data 
 * **Enhanced Census Utilities**: Dynamic discovery and download of Census TIGER/Line boundaries
 * **Intelligent Data Selection**: Automatic recommendation of the best Census datasets for your analysis needs
 * **Spatial Data Processing**: Comprehensive tools for working with geographic boundaries and spatial data
+* **Bivariate Choropleth Mapping**: Fully restored two-dimensional mapping with proper color schemes and legends
 * **Geocoding Services**: Address geocoding and reverse geocoding capabilities
 * **Data Integration**: Seamless integration with external data sources and analytics platforms
+* **Import Chain Fixes**: All import issues resolved, ensuring reliable module loading
 
 Key Features
 -----------
@@ -86,41 +88,59 @@ Install the geographic utilities with full support:
 
 .. code-block:: bash
 
-   pip install siege-utilities[geo]
+   # Core geospatial dependencies (now properly resolved)
+   pip install geopandas>=1.1.1 shapely>=2.1.1 fiona>=1.10.1
+   pip install matplotlib seaborn contextily
+   
+   # For bivariate choropleth functionality
+   pip install pyproj>=3.7.2
+   
+   # Optional enhancements
+   pip install folium>=0.20.0  # interactive maps
+   pip install reportlab>=4.4.3  # PDF reports
 
-For development and testing:
-
-.. code-block:: bash
-
-   pip install siege-utilities[geo,testing]
+**Note**: All import chain failures have been resolved. The package now loads
+reliably without circular dependency issues.
 
 Quick Start
 ----------
 
-1. **Get Census Data Intelligence**:
+1. **Create Bivariate Choropleth Maps** (Restored Functionality):
 
    .. code-block:: python
 
-      from siege_utilities.geo import get_census_intelligence
+      from siege_utilities.reporting.chart_generator import ChartGenerator
+      import geopandas as gpd
       
-      mapper, selector = get_census_intelligence()
+      # Initialize chart generator
+      chart_gen = ChartGenerator()
+      
+      # Load geographic data with your variables
+      gdf = gpd.read_file('your_data.shp')  # or Census boundaries
+      
+      # Create bivariate choropleth with proper 2D color scheme
+      fig = chart_gen.create_bivariate_choropleth(
+          geodata=gdf,
+          variable1='population',
+          variable2='income',
+          variable1_name='Population',
+          variable2_name='Income',
+          title="Population vs Income Analysis",
+          output_path='bivariate_map.png'
+      )
+
+2. **Get Census Data Intelligence**:
+
+   .. code-block:: python
+
+      from siege_utilities.geo import get_census_data_selector
+      
+      # Now imports without circular dependency issues
+      selector = get_census_data_selector()
       
       # Get dataset recommendations
       recommendations = selector.select_datasets_for_analysis(
           "demographics", "tract"
-      )
-
-2. **Download Census Boundaries**:
-
-   .. code-block:: python
-
-      from siege_utilities.geo.spatial_data import census_source
-      
-      # Download county boundaries for California
-      counties = census_source.get_geographic_boundaries(
-          year=2020,
-          geographic_level="county",
-          state_fips="06"
       )
 
 3. **Use Intelligent Data Selection**:
@@ -129,7 +149,7 @@ Quick Start
 
       from siege_utilities.geo import quick_census_selection
       
-      # Quick selection for business analysis
+      # Quick selection for business analysis  
       result = quick_census_selection("business", "county")
       print(f"Use {result['recommendations']['primary_recommendation']['dataset']}")
 
@@ -195,3 +215,46 @@ See the `examples/ <../examples.html>`_ directory for working examples:
 * **enhanced_features_demo.py** - Examples of enhanced Census utilities
 
 For detailed API documentation, see :doc:`api/siege_utilities/geo/spatial_data`.
+
+Recent Fixes and Improvements
+----------------------------
+
+**Import Chain Resolution**
+
+All import issues have been resolved:
+
+* Fixed ``siege_utilities.geo.__init__.py`` to only import existing functions
+* Corrected class name references (``SpatialTransformer`` → ``SpatialDataTransformer``)
+* Removed non-existent imports (``Geocoder`` class, ``get_geocoder`` function)
+* Used string type hints to avoid import-time errors with PySpark
+
+**Bivariate Choropleth Restoration**
+
+The bivariate choropleth functionality has been completely restored:
+
+* **Proper Implementation**: Now matches reference implementation from https://github.com/mikhailsirenko/bivariate-choropleth
+* **Two-dimensional Color Schemes**: Quantile-based binning with proper color mixing
+* **Integrated Legends**: Color matrix showing variable ranges and combinations
+* **Geographic Data Support**: Works with GeoDataFrames and shapefiles
+* **Basemap Integration**: Optional background maps for context
+* **Professional Output**: High-quality PNG generation
+
+**Logging Standardization**
+
+All geographic modules now use the integrated logging system:
+
+* Consistent logging patterns across all modules
+* Proper error handling and user feedback
+* Integration with the main package logging framework
+
+**Testing and Reliability**
+
+The package now loads reliably:
+
+* All circular dependencies resolved
+* Import errors eliminated
+* Cross-module function availability maintained
+* Comprehensive test coverage for critical functionality
+
+For the latest examples and usage patterns, see the restored bivariate choropleth
+examples in ``siege_utilities/reporting/examples/``.

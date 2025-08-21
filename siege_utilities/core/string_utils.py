@@ -1,8 +1,15 @@
-import logging
-
-from django.db.models.fields import return_None
-
-logger = logging.getLogger(__name__)
+# Import logging utilities
+try:
+    from ..core.logging import setup_module_logging
+    setup_module_logging(globals(), __name__)
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
+    def log_info(msg): logger.info(msg)
+    def log_debug(msg): logger.debug(msg)
+    def log_warning(msg): logger.warning(msg)
+    def log_error(msg): logger.error(msg)
+    def log_critical(msg): logger.critical(msg)
 
 
 def remove_wrapping_quotes_and_trim(target_string: str) ->str:

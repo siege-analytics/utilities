@@ -5,10 +5,25 @@ Handles database connection settings for Spark and other uses.
 
 import json
 import pathlib
-import logging
+# Integrated logging system
+try:
+    from ..core.logging import setup_module_logging
+    setup_module_logging(globals(), __name__)
+except ImportError:
+    try:
+        from siege_utilities.core.logging import setup_module_logging
+        setup_module_logging(globals(), __name__)
+    except ImportError:
+        import logging
+        logger = logging.getLogger(__name__)
+        def log_info(msg): logger.info(msg)
+        def log_debug(msg): logger.debug(msg)
+        def log_warning(msg): logger.warning(msg)
+        def log_error(msg): logger.error(msg)
+        def log_critical(msg): logger.critical(msg)
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
+
 
 
 def create_database_config(name: str, connection_type: str, host: str, port: int,
@@ -111,7 +126,7 @@ def save_database_config(config: Dict[str, Any], config_directory: str = "config
 
     # Warning about password storage
     print(f"Saving database config with password in plain text to {config_file}")
-    print("In production, consider using environment variables or encryption")
+    log_info("In production, consider using environment variables or encryption")
 
     with open(config_file, 'w') as f:
         json.dump(config, f, indent=2)
@@ -204,7 +219,7 @@ def test_database_connection(db_name: str, config_directory: str = "config") -> 
 
     Example:
         >>> if siege_utilities.test_database_connection("analytics_db"):
-        ...     print("Database connection successful!")
+        ...     log_info("Database connection successful!")
     """
 
     config = load_database_config(db_name, config_directory)
@@ -242,8 +257,8 @@ def test_database_connection(db_name: str, config_directory: str = "config") -> 
             return True
 
         except ImportError:
-            print("SQLAlchemy not available for connection testing")
-            print("Install with: pip install sqlalchemy")
+            log_info("SQLAlchemy not available for connection testing")
+            log_info("Install with: pip install sqlalchemy")
             return False
 
     except Exception as e:
@@ -270,7 +285,7 @@ def list_database_configs(config_directory: str = "config") -> list:
     config_dir = pathlib.Path(config_directory)
 
     if not config_dir.exists():
-        print("Config directory does not exist")
+        log_info("Config directory does not exist")
         return []
 
     databases = []
@@ -319,7 +334,7 @@ def create_spark_session_with_databases(app_name: str = "SiegeAnalytics",
     try:
         from pyspark.sql import SparkSession
     except ImportError:
-        print("PySpark not available. Install with: pip install pyspark")
+        log_info("PySpark not available. Install with: pip install pyspark")
         return None
 
     # Build Spark session
