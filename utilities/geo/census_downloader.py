@@ -43,25 +43,73 @@ log = logging.getLogger(__name__)
 CENSUS_TIGER_BASE = "https://www2.census.gov/geo/tiger"
 CENSUS_API_BASE = "https://api.census.gov/data"
 
-# State FIPS codes mapping
-STATE_FIPS = {
-    'Alabama': '01', 'Alaska': '02', 'Arizona': '04', 'Arkansas': '05',
-    'California': '06', 'Colorado': '08', 'Connecticut': '09', 'Delaware': '10',
-    'District of Columbia': '11', 'Florida': '12', 'Georgia': '13', 'Hawaii': '15',
-    'Idaho': '16', 'Illinois': '17', 'Indiana': '18', 'Iowa': '19',
-    'Kansas': '20', 'Kentucky': '21', 'Louisiana': '22', 'Maine': '23',
-    'Maryland': '24', 'Massachusetts': '25', 'Michigan': '26', 'Minnesota': '27',
-    'Mississippi': '28', 'Missouri': '29', 'Montana': '30', 'Nebraska': '31',
-    'Nevada': '32', 'New Hampshire': '33', 'New Jersey': '34', 'New Mexico': '35',
-    'New York': '36', 'North Carolina': '37', 'North Dakota': '38', 'Ohio': '39',
-    'Oklahoma': '40', 'Oregon': '41', 'Pennsylvania': '42', 'Rhode Island': '44',
-    'South Carolina': '45', 'South Dakota': '46', 'Tennessee': '47', 'Texas': '48',
-    'Utah': '49', 'Vermont': '50', 'Virginia': '51', 'Washington': '53',
-    'West Virginia': '54', 'Wisconsin': '55', 'Wyoming': '56'
+# Comprehensive FIPS codes mapping with names and abbreviations
+# Includes all 50 states, DC, and territories
+FIPS_DATA = {
+    '01': {'name': 'Alabama', 'abbrev': 'AL'},
+    '02': {'name': 'Alaska', 'abbrev': 'AK'},
+    '04': {'name': 'Arizona', 'abbrev': 'AZ'},
+    '05': {'name': 'Arkansas', 'abbrev': 'AR'},
+    '06': {'name': 'California', 'abbrev': 'CA'},
+    '08': {'name': 'Colorado', 'abbrev': 'CO'},
+    '09': {'name': 'Connecticut', 'abbrev': 'CT'},
+    '10': {'name': 'Delaware', 'abbrev': 'DE'},
+    '11': {'name': 'District of Columbia', 'abbrev': 'DC'},
+    '12': {'name': 'Florida', 'abbrev': 'FL'},
+    '13': {'name': 'Georgia', 'abbrev': 'GA'},
+    '15': {'name': 'Hawaii', 'abbrev': 'HI'},
+    '16': {'name': 'Idaho', 'abbrev': 'ID'},
+    '17': {'name': 'Illinois', 'abbrev': 'IL'},
+    '18': {'name': 'Indiana', 'abbrev': 'IN'},
+    '19': {'name': 'Iowa', 'abbrev': 'IA'},
+    '20': {'name': 'Kansas', 'abbrev': 'KS'},
+    '21': {'name': 'Kentucky', 'abbrev': 'KY'},
+    '22': {'name': 'Louisiana', 'abbrev': 'LA'},
+    '23': {'name': 'Maine', 'abbrev': 'ME'},
+    '24': {'name': 'Maryland', 'abbrev': 'MD'},
+    '25': {'name': 'Massachusetts', 'abbrev': 'MA'},
+    '26': {'name': 'Michigan', 'abbrev': 'MI'},
+    '27': {'name': 'Minnesota', 'abbrev': 'MN'},
+    '28': {'name': 'Mississippi', 'abbrev': 'MS'},
+    '29': {'name': 'Missouri', 'abbrev': 'MO'},
+    '30': {'name': 'Montana', 'abbrev': 'MT'},
+    '31': {'name': 'Nebraska', 'abbrev': 'NE'},
+    '32': {'name': 'Nevada', 'abbrev': 'NV'},
+    '33': {'name': 'New Hampshire', 'abbrev': 'NH'},
+    '34': {'name': 'New Jersey', 'abbrev': 'NJ'},
+    '35': {'name': 'New Mexico', 'abbrev': 'NM'},
+    '36': {'name': 'New York', 'abbrev': 'NY'},
+    '37': {'name': 'North Carolina', 'abbrev': 'NC'},
+    '38': {'name': 'North Dakota', 'abbrev': 'ND'},
+    '39': {'name': 'Ohio', 'abbrev': 'OH'},
+    '40': {'name': 'Oklahoma', 'abbrev': 'OK'},
+    '41': {'name': 'Oregon', 'abbrev': 'OR'},
+    '42': {'name': 'Pennsylvania', 'abbrev': 'PA'},
+    '44': {'name': 'Rhode Island', 'abbrev': 'RI'},
+    '45': {'name': 'South Carolina', 'abbrev': 'SC'},
+    '46': {'name': 'South Dakota', 'abbrev': 'SD'},
+    '47': {'name': 'Tennessee', 'abbrev': 'TN'},
+    '48': {'name': 'Texas', 'abbrev': 'TX'},
+    '49': {'name': 'Utah', 'abbrev': 'UT'},
+    '50': {'name': 'Vermont', 'abbrev': 'VT'},
+    '51': {'name': 'Virginia', 'abbrev': 'VA'},
+    '53': {'name': 'Washington', 'abbrev': 'WA'},
+    '54': {'name': 'West Virginia', 'abbrev': 'WV'},
+    '55': {'name': 'Wisconsin', 'abbrev': 'WI'},
+    '56': {'name': 'Wyoming', 'abbrev': 'WY'},
+    # US Territories
+    '60': {'name': 'American Samoa', 'abbrev': 'AS'},
+    '66': {'name': 'Guam', 'abbrev': 'GU'},
+    '69': {'name': 'Northern Mariana Islands', 'abbrev': 'MP'},
+    '72': {'name': 'Puerto Rico', 'abbrev': 'PR'},
+    '78': {'name': 'Virgin Islands', 'abbrev': 'VI'}
 }
 
-# Reverse mapping
-FIPS_TO_STATE = {v: k for k, v in STATE_FIPS.items()}
+# Create reverse lookup dictionaries for convenience
+STATE_FIPS = {data['name']: fips for fips, data in FIPS_DATA.items()}
+ABBREV_FIPS = {data['abbrev']: fips for fips, data in FIPS_DATA.items()}
+FIPS_TO_STATE = {fips: data['name'] for fips, data in FIPS_DATA.items()}
+FIPS_TO_ABBREV = {fips: data['abbrev'] for fips, data in FIPS_DATA.items()}
 
 # Geography levels that work at national scale vs need state filtering
 NATIONAL_GEOGRAPHIES = ['state', 'county', 'zcta5', 'cbsa', 'place']
@@ -171,28 +219,34 @@ class CensusBoundaryDownloader:
         """Get FIPS code for a state name, abbreviation, or FIPS code."""
         state = state.strip()
         
-        # Already a FIPS code
-        if state.isdigit() and len(state) == 2:
-            return state if state in FIPS_TO_STATE else None
+        # Already a FIPS code - validate it exists
+        if state.isdigit() and len(state) <= 2:
+            fips_code = state.zfill(2)  # Pad with leading zero if needed
+            return fips_code if fips_code in FIPS_DATA else None
         
-        # State name
-        if state.title() in STATE_FIPS:
-            return STATE_FIPS[state.title()]
+        # Try exact state name match (case-insensitive)
+        for fips, data in FIPS_DATA.items():
+            if data['name'].lower() == state.lower():
+                return fips
         
-        # Try state abbreviations (common ones)
-        abbrev_mapping = {
-            'AL': '01', 'AK': '02', 'AZ': '04', 'AR': '05', 'CA': '06', 'CO': '08',
-            'CT': '09', 'DE': '10', 'DC': '11', 'FL': '12', 'GA': '13', 'HI': '15',
-            'ID': '16', 'IL': '17', 'IN': '18', 'IA': '19', 'KS': '20', 'KY': '21',
-            'LA': '22', 'ME': '23', 'MD': '24', 'MA': '25', 'MI': '26', 'MN': '27',
-            'MS': '28', 'MO': '29', 'MT': '30', 'NE': '31', 'NV': '32', 'NH': '33',
-            'NJ': '34', 'NM': '35', 'NY': '36', 'NC': '37', 'ND': '38', 'OH': '39',
-            'OK': '40', 'OR': '41', 'PA': '42', 'RI': '44', 'SC': '45', 'SD': '46',
-            'TN': '47', 'TX': '48', 'UT': '49', 'VT': '50', 'VA': '51', 'WA': '53',
-            'WV': '54', 'WI': '55', 'WY': '56'
-        }
+        # Try state abbreviation match (case-insensitive)
+        state_upper = state.upper()
+        if state_upper in ABBREV_FIPS:
+            return ABBREV_FIPS[state_upper]
         
-        return abbrev_mapping.get(state.upper())
+        # Try partial name match (for common variations)
+        state_lower = state.lower()
+        for fips, data in FIPS_DATA.items():
+            name_lower = data['name'].lower()
+            # Handle common variations
+            if (name_lower.startswith(state_lower) or 
+                state_lower in name_lower or
+                # Special cases
+                (state_lower == 'dc' and 'district' in name_lower) or
+                (state_lower == 'virgin islands' and 'virgin' in name_lower)):
+                return fips
+        
+        return None
     
     def _download_national_geography(self, geography: str, year: int, resolution: str) -> Optional[str]:
         """Download national-level geography (states, counties, etc.)."""
@@ -206,8 +260,10 @@ class CensusBoundaryDownloader:
         downloaded_files = []
         
         for state_fips in states:
-            state_name = FIPS_TO_STATE.get(state_fips, state_fips)
-            log_info(f"Downloading {geography} for {state_name} ({state_fips})")
+            state_info = FIPS_DATA.get(state_fips, {})
+            state_name = state_info.get('name', state_fips)
+            state_abbrev = state_info.get('abbrev', state_fips)
+            log_info(f"Downloading {geography} for {state_name} ({state_abbrev}, {state_fips})")
             
             # Construct state-specific URL
             url = f"{CENSUS_TIGER_BASE}/GENZ{year}/shp/cb_{year}_{state_fips}_{geography}_{resolution}.zip"
@@ -427,3 +483,85 @@ def get_census_data(
     """
     api = CensusDataAPI(api_key)
     return api.get_population_data(geography, state)
+
+
+def get_state_fips(state_identifier: str) -> Optional[str]:
+    """
+    Get FIPS code for a state by name, abbreviation, or validate existing FIPS.
+    
+    Args:
+        state_identifier: State name ('California'), abbreviation ('CA'), or FIPS ('06')
+        
+    Returns:
+        Two-digit FIPS code or None if not found
+    """
+    downloader = CensusBoundaryDownloader()
+    return downloader._get_state_fips(state_identifier)
+
+
+def get_state_info(state_identifier: str) -> Optional[Dict[str, str]]:
+    """
+    Get comprehensive state information.
+    
+    Args:
+        state_identifier: State name, abbreviation, or FIPS code
+        
+    Returns:
+        Dictionary with 'fips', 'name', 'abbrev' or None if not found
+    """
+    downloader = CensusBoundaryDownloader()
+    return downloader.get_state_info(state_identifier)
+
+
+def list_all_states_and_territories() -> List[Dict[str, str]]:
+    """
+    Get complete list of all US states and territories.
+    
+    Returns:
+        List of dictionaries with FIPS, name, abbreviation, and type
+    """
+    downloader = CensusBoundaryDownloader()
+    return downloader.list_states_and_territories()
+
+
+def get_states_by_type(state_type: str = 'State') -> List[Dict[str, str]]:
+    """
+    Get states/territories filtered by type.
+    
+    Args:
+        state_type: 'State', 'Territory', or 'District'
+        
+    Returns:
+        Filtered list of states/territories
+    """
+    all_states = list_all_states_and_territories()
+    return [s for s in all_states if s['type'] == state_type]
+
+
+    def get_available_state_fips(self) -> Dict[str, Dict[str, str]]:
+        """Get comprehensive mapping of FIPS codes to state/territory info."""
+        return FIPS_DATA.copy()
+    
+    def get_state_info(self, identifier: str) -> Optional[Dict[str, str]]:
+        """Get state/territory information by FIPS, name, or abbreviation."""
+        fips = self._get_state_fips(identifier)
+        if fips and fips in FIPS_DATA:
+            return {
+                'fips': fips,
+                'name': FIPS_DATA[fips]['name'],
+                'abbrev': FIPS_DATA[fips]['abbrev']
+            }
+        return None
+    
+    def list_states_and_territories(self) -> List[Dict[str, str]]:
+        """Get list of all states and territories with their info."""
+        return [
+            {
+                'fips': fips,
+                'name': data['name'],
+                'abbrev': data['abbrev'],
+                'type': 'Territory' if fips in ['60', '66', '69', '72', '78'] else 
+                       'District' if fips == '11' else 'State'
+            }
+            for fips, data in FIPS_DATA.items()
+        ]
