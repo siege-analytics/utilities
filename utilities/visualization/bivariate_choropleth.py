@@ -7,13 +7,17 @@ and fallback mechanisms for missing dependencies.
 """
 
 import logging
-import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple, Any
 import tempfile
 import os
 
 # Optional dependencies with fallbacks
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
 try:
     import pandas as pd
 except ImportError:
@@ -80,12 +84,17 @@ class BivariateMapper:
         self.geopandas_available = gpd is not None
         self.pandas_available = pd is not None
         
+        # Check numpy availability
+        self.numpy_available = np is not None
+        
         if not self.matplotlib_available:
             log_warning("matplotlib not available - install with: pip install matplotlib")
         if not self.geopandas_available:
             log_warning("geopandas not available - install with: pip install geopandas")
         if not self.pandas_available:
             log_warning("pandas not available - install with: pip install pandas")
+        if not self.numpy_available:
+            log_warning("numpy not available - install with: pip install numpy")
     
     def create_bivariate_choropleth(
         self,
@@ -284,6 +293,9 @@ class BivariateMapper:
         if not self.pandas_available:
             log_error("pandas required for data handling: pip install pandas")
             return False
+        if not self.numpy_available:
+            log_error("numpy required for data processing: pip install numpy")
+            return False
         return True
     
     def _load_geodata(self, data: Union[str, Any]) -> Optional[Any]:
@@ -415,10 +427,11 @@ class BivariateMapper:
                 polygons.append(poly)
                 
                 # Add sample data
+                import random
                 data.append({
                     'id': f'region_{i}',
-                    'population': np.random.randint(1000, 50000),
-                    'income': np.random.randint(30000, 100000),
+                    'population': random.randint(1000, 50000),
+                    'income': random.randint(30000, 100000),
                     'geometry': poly
                 })
             

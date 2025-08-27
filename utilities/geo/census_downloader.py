@@ -476,6 +476,34 @@ class CensusBoundaryDownloader:
             log_error(f"Failed to load shapefile: {e}")
             return None
     
+    def get_available_state_fips(self) -> Dict[str, Dict[str, str]]:
+        """Get comprehensive mapping of FIPS codes to state/territory info."""
+        return FIPS_DATA.copy()
+    
+    def get_state_info(self, identifier: str) -> Optional[Dict[str, str]]:
+        """Get state/territory information by FIPS, name, or abbreviation."""
+        fips = self._get_state_fips(identifier)
+        if fips and fips in FIPS_DATA:
+            return {
+                'fips': fips,
+                'name': FIPS_DATA[fips]['name'],
+                'abbrev': FIPS_DATA[fips]['abbrev']
+            }
+        return None
+    
+    def list_states_and_territories(self) -> List[Dict[str, str]]:
+        """Get list of all states and territories with their info."""
+        return [
+            {
+                'fips': fips,
+                'name': data['name'],
+                'abbrev': data['abbrev'],
+                'type': 'Territory' if fips in ['60', '66', '69', '72', '78'] else 
+                       'District' if fips == '11' else 'State'
+            }
+            for fips, data in FIPS_DATA.items()
+        ]
+    
     def get_available_geographies(self) -> Dict[str, str]:
         """Get list of available geography types."""
         return {
@@ -660,35 +688,6 @@ def get_states_by_type(state_type: str = 'State') -> List[Dict[str, str]]:
     """
     all_states = list_all_states_and_territories()
     return [s for s in all_states if s['type'] == state_type]
-
-
-    def get_available_state_fips(self) -> Dict[str, Dict[str, str]]:
-        """Get comprehensive mapping of FIPS codes to state/territory info."""
-        return FIPS_DATA.copy()
-    
-    def get_state_info(self, identifier: str) -> Optional[Dict[str, str]]:
-        """Get state/territory information by FIPS, name, or abbreviation."""
-        fips = self._get_state_fips(identifier)
-        if fips and fips in FIPS_DATA:
-            return {
-                'fips': fips,
-                'name': FIPS_DATA[fips]['name'],
-                'abbrev': FIPS_DATA[fips]['abbrev']
-            }
-        return None
-    
-    def list_states_and_territories(self) -> List[Dict[str, str]]:
-        """Get list of all states and territories with their info."""
-        return [
-            {
-                'fips': fips,
-                'name': data['name'],
-                'abbrev': data['abbrev'],
-                'type': 'Territory' if fips in ['60', '66', '69', '72', '78'] else 
-                       'District' if fips == '11' else 'State'
-            }
-            for fips, data in FIPS_DATA.items()
-        ]
 
     def _get_url_pattern_for_year(self, year: int) -> Optional[Dict[str, Any]]:
         """Get the appropriate URL pattern for a given year."""
