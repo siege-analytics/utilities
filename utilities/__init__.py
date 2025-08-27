@@ -59,12 +59,12 @@ for item in os.listdir(package_dir):
         globals()[item] = subpackage
         __all__.append(item)
 
-        # Then, find all modules in the subpackage
-        for subfile in os.listdir(item_path):
-            if subfile.endswith(".py") and subfile != "__init__.py":
-                submodule_name = subfile[:-3]
-                submodule_path = f"{subpackage_path}.{submodule_name}"
-                new_names = import_all_from_module(submodule_path)
-                __all__.extend(new_names)
+        # Import functions from the subpackage's __init__.py (avoiding duplicates)
+        for name, obj in inspect.getmembers(subpackage):
+            if inspect.isfunction(obj) and not name.startswith("_"):
+                # Only add if not already imported to avoid duplicates
+                if name not in globals():
+                    globals()[name] = obj
+                    __all__.append(name)
 
 print(f"utilities package: Imported {len(__all__)} functions and subpackages")

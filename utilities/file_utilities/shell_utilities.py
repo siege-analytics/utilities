@@ -4,13 +4,29 @@ import io
 import hashlib
 from pyexpat.errors import messages
 
-from IPython.utils.capture import capture_output
+# Optional dependency
+try:
+    from IPython.utils.capture import capture_output
+except ImportError:
+    from utilities.fallbacks import capture_output
 import pathlib
-import requests
+# Optional dependency
+try:
+    import requests
+except ImportError:
+    requests = None
 import subprocess
 
-from pkg_resources import working_set
-from tqdm import tqdm
+# Optional dependencies
+try:
+    from pkg_resources import working_set
+except ImportError:
+    working_set = None
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    from utilities.fallbacks import tqdm
 
 import zipfile
 
@@ -18,15 +34,8 @@ import zipfile
 
 import logging
 
-from utilities import *
-from utilities.logging_utils import (
-    init_logger,
-    log_info,
-    log_error,
-    log_debug,
-    log_warning,
-    log_critical,
-)
+# Only import what's actually needed
+from utilities.logging_utils import log_info, log_error
 
 logging.getLogger(__name__)
 

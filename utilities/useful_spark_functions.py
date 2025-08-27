@@ -30,7 +30,7 @@ from tabulate import tabulate  # Ensure tabulate is installed (pip install tabul
 
 # dheeraj defined
 from utilities.logging_utils import log_info, log_error
-from settings import *
+# Note: settings import removed - was causing import errors
 
 # These Spark functions will need to be organised into a subfolder because some are Sedona
 

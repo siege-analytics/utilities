@@ -14,56 +14,20 @@ import hashlib
 from typing import Optional, Tuple, Dict
 
 # Import your utilities (with fallbacks for missing functions)
-try:
-    from utilities.logging_utils import log_info, log_error
-except ImportError:
-
-    def log_info(msg):
-        print(f"INFO: {msg}")
-
-    def log_error(msg):
-        print(f"ERROR: {msg}")
+# Import logging functions (now working with fixed package structure)
+from utilities.logging_utils import log_info, log_error
 
 
-try:
-    from utilities.file_utilities.paths import ensure_path_exists
-except ImportError:
-
-    def ensure_path_exists(path):
-        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
+# Import path functions (now working with fixed package structure)
+from utilities.file_utilities.paths import ensure_path_exists
 
 
-# Import hash functions - with proper fallbacks
-try:
-    from utilities.file_utilities.hash_management import (
-        generate_sha256_hash_for_file,
-        get_file_hash,
-        get_quick_file_signature,
-    )
-except ImportError:
-    log_error("Hash functions not found in utilities - using built-in fallbacks")
-
-    # Fallback hash functions
-    def generate_sha256_hash_for_file(file_path):
-        try:
-            sha256_hash = hashlib.sha256()
-            with open(file_path, "rb") as f:
-                for chunk in iter(lambda: f.read(65536), b""):
-                    sha256_hash.update(chunk)
-            return sha256_hash.hexdigest()
-        except Exception as e:
-            log_error(f"Error generating hash for {file_path}: {e}")
-            return None
-
-    def get_file_hash(file_path, algorithm="sha256"):
-        return generate_sha256_hash_for_file(file_path)
-
-    def get_quick_file_signature(file_path):
-        try:
-            stat = pathlib.Path(file_path).stat()
-            return f"{stat.st_size}_{stat.st_mtime}"
-        except:
-            return "error"
+# Import hash functions (now working with fixed package structure)
+from utilities.file_utilities.hash_management import (
+    generate_sha256_hash_for_file,
+    get_file_hash,
+    get_quick_file_signature,
+)
 
 
 # Try to get settings

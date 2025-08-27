@@ -4,13 +4,29 @@ import io
 import hashlib
 from pyexpat.errors import messages
 
-from IPython.utils.capture import capture_output
+# Optional dependency
+try:
+    from IPython.utils.capture import capture_output
+except ImportError:
+    from utilities.fallbacks import capture_output
 import pathlib
-import requests
+# Optional dependency
+try:
+    import requests
+except ImportError:
+    requests = None
 import subprocess
 
-from pkg_resources import working_set
-from tqdm import tqdm
+# Optional dependencies
+try:
+    from pkg_resources import working_set
+except ImportError:
+    working_set = None
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    from utilities.fallbacks import tqdm
 
 import zipfile
 

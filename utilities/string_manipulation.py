@@ -2,8 +2,7 @@
 from logging import lastResort
 
 # custom functions and data
-
-from utilities import *
+# (no custom imports needed for this module)
 
 # logging
 
